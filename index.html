@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11643d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ace Rank">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="ace-rank-icon.svg">
   <title>Ace Rank — Tennis ratings</title>
   <style>
     :root{--ink:#13261e;--muted:#61736a;--paper:#f6f7f2;--card:#fff;--line:#dce3db;--green:#11643d;--lime:#c7ed6a;--red:#b43737;--shadow:0 12px 30px rgba(19,38,30,.08)}
@@ -69,5 +75,10 @@ function likePost(id){let post=state.history.find(match=>match.id===id);if(!post
 function commentPost(id){let post=state.history.find(match=>match.id===id);if(!post)return;post.comments=(post.comments||0)+1;persist();renderHome()}
 function editLastMatch(){if(!state.last)return;state.last.before.forEach(x=>{let p=state.players.find(p=>p.name===x.name);if(p){p.rating=x.r;p.matches=x.m}});state.history.pop();state.last=null;persist();openMatch()}
 renderHome();renderRanks();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+}
 </script>
 </body></html>
