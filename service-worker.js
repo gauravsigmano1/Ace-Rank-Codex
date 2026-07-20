@@ -1,4 +1,4 @@
-const CACHE = 'ace-rank-v2';
+const CACHE = 'ace-rank-v5';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './ace-rank-icon.svg'];
 
 self.addEventListener('install', event => {
