@@ -12,15 +12,19 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
       // Temporary social interaction rule. Replace likes/comments with subcollections
       // or Cloud Functions before a public launch.
-      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','comments']);
+      allow update: if request.auth != null && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','comments']) ||
+        (resource.data.opponentEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pending']))
+      );
       allow delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
     }
 
     match /approvals/{approvalId} {
       allow read: if request.auth != null && (resource.data.authorUid == request.auth.uid || resource.data.opponentEmail == request.auth.token.email);
       allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
-      // A Cloud Function must make the final acceptance and ranking update.
-      allow update, delete: if false;
+      allow update: if request.auth != null && resource.data.opponentEmail == request.auth.token.email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','approvedBy','approvedAt']);
+      allow delete: if false;
     }
   }
 }

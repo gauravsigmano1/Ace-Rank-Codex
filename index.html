@@ -81,8 +81,10 @@ function saveMatch(){
   let aWins=scores.filter(s=>s[0]>s[1]).length,bWins=scores.length-aWins;if(aWins===bWins){alert('A match needs a winner. Add a deciding set.');return}
   let won=aWins>bWins,teamA=[current],teamB=[];if(draft.type==='singles')teamB=[draft.players.opponent];else{teamA.push(draft.players.partner);teamB=[draft.players.opponent1,draft.players.opponent2]}
   let key=draft.type==='singles'?'singles':'doubles',mk=draft.type==='singles'?'sm':'dm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=Math.round(raw/teamA.length),score=scores.map(s=>s.join('-')).join(', '),venue=byId('venueInput').value.trim();
-  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now()};
-  byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Request opponent approval</h1><p class="muted">${delta>=0?'+':''}${delta} ${key} points will remain pending until accepted.</p><div class="approval"><b>Opponent email</b><br><input id="opponentEmail" type="email" placeholder="opponent@email.com"><br><button class="primary wide" onclick="createApprovalLink()">Create shareable link</button></div></div>`;go(5);
+  let registeredOpponent=teamB.find(p=>p.email);
+  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
+  let action=registeredOpponent?`<div class="approval"><b>Send to ${esc(registeredOpponent.name)}</b><br><span class="muted">${esc(registeredOpponent.email)}</span><br><button class="primary wide" onclick="submitRegisteredApproval()">Send approval request</button></div>`:`<div class="approval"><b>Opponent email</b><br><input id="opponentEmail" type="email" placeholder="opponent@email.com"><br><button class="primary wide" onclick="createApprovalLink()">Create shareable link</button></div>`;
+  byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Request opponent approval</h1><p class="muted">${delta>=0?'+':''}${delta} ${key} points will remain pending until accepted.</p>${action}</div>`;go(5);
 }
 function createApprovalLink(){let email=byId('opponentEmail').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}let r=draft.approval;r.opponentEmail=email;r.pending=true;state.pending.push(r);state.posts.push({...r,likes:0,comments:0,liked:false});if(r.venue&&!state.venues.includes(r.venue))state.venues.unshift(r.venue);save();let url=`${location.origin}${location.pathname}?approval=${btoa(JSON.stringify(r))}`;byId('result').innerHTML=`<div class="result"><div class="medal">&#128279;</div><h1>Approval link ready</h1><p class="muted">Send this to ${esc(email)}. Their profile must use the same email before they can accept.</p><button class="primary wide" onclick="navigator.share?navigator.share({title:'Approve Ace Rank score',url:'${url}'}):navigator.clipboard.writeText('${url}')">Share link</button><button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to home</button></div>`}
 function acceptPending(id){let r=state.pending.find(x=>x.id===id);if(!r||r.opponentEmail!==current.email){alert('This request must be accepted using the invited email address.');return}r.accepted=true;let post=state.posts.find(x=>x.id===id);if(post)post.pending=false;save();cleanRenderAll();alert('Score accepted. A production backend will synchronize the confirmed rating change to both players.');}
@@ -97,18 +99,20 @@ if(current)cleanRenderAll();
    not a service-account credential. Server-side secrets are never stored here. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,setDoc,addDoc,onSnapshot,query,orderBy,limit,updateDoc,increment,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp);
-let cloudReady=false, pendingPassword='';
+let cloudReady=false, pendingPassword='',stopApprovals=null;
 const asPlayer=(id,data)=>({id,...data});
 
 function showProfileForm(){byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden')}
 function watchCloudData(){
   onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll()},err=>console.warn('Could not load Rallysh users',err));
   onSnapshot(query(collection(db,'posts'),orderBy('createdAt','desc'),limit(20)),snap=>{state.posts=snap.docs.map(x=>({id:x.id,...x.data()}));if(current)renderFeed()},err=>console.warn('Could not load Rallysh posts',err));
+  if(stopApprovals)stopApprovals();
+  stopApprovals=onSnapshot(query(collection(db,'approvals'),where('opponentEmail','==',current.email),where('status','==','pending')),snap=>{state.pending=snap.docs.map(x=>({id:x.id,...x.data()}));renderAll()},err=>console.warn('Could not load Rallysh approvals',err));
 }
 onAuthStateChanged(auth,async user=>{
   if(!user){current=null;byId('auth').classList.remove('hidden');return}
@@ -155,7 +159,7 @@ window.createProfile=async function(){
     let photo=user?.photoURL||'';
     if(profilePhoto){const imageRef=ref(storage,`profile-photos/${user.uid}/profile.jpg`);await uploadString(imageRef,profilePhoto,'data_url');photo=await getDownloadURL(imageRef)}
     const profile={email,name,dob,gender,photo,singles:1200,doubles:1200,sm:0,dm:0,createdAt:Date.now()};
-    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};byId('auth').classList.add('hidden');renderAll();
+    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};byId('auth').classList.add('hidden');watchCloudData();renderAll();
   }catch(error){
     console.error(error);
     const reason=error?.code||'unknown error';
@@ -169,8 +173,7 @@ window.createProfile=async function(){
 window.openProfile=function(){if(!current)return;alert('Profile editing will be added in the next backend update. Sign-out is available from the device app settings.')}
 window.cloudLogout=()=>signOut(auth);
 
-window.createApprovalLink=async function(){
-  const email=byId('opponentEmail').value.trim().toLowerCase();
+async function saveApproval(email,shareLink){
   if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
   if(!auth.currentUser||!draft.approval){alert('Please sign in again and retry.');return}
   const r=draft.approval;r.opponentEmail=email;r.pending=true;r.authorUid=auth.currentUser.uid;
@@ -180,10 +183,17 @@ window.createApprovalLink=async function(){
     const match={...r,createdAt:Date.now(),likes:0,comments:0,liked:false};
     await setDoc(doc(db,'posts',r.id),match);
     await setDoc(doc(db,'approvals',r.id),{...match,status:'pending'});
-    const url=`https://rallysh.web.app/?approval=${encodeURIComponent(r.id)}`;
-    byId('result').innerHTML=`<div class="result"><div class="medal">&#128279;</div><h1>Approval request saved</h1><p class="muted">Send the link to ${esc(email)}. The score stays pending until they accept it.</p><button class="primary wide" onclick="navigator.share?navigator.share({title:'Approve Rallysh score',url:'${url}'}):navigator.clipboard.writeText('${url}')">Share link</button><button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to home</button></div>`;
-  }catch(error){console.error(error);alert('Could not save the match. Check Firebase rules and your internet connection.');if(submit){submit.disabled=false;submit.textContent='Create shareable link'}}
+    const url=`${location.origin}${location.pathname}?approval=${encodeURIComponent(r.id)}`;
+    const next=shareLink?`<p class="muted">Send this link to ${esc(email)}. They can register with that email and approve the score.</p><button class="primary wide" onclick="navigator.share?navigator.share({title:'Approve Rallysh score',url:'${url}'}):navigator.clipboard.writeText('${url}')">Share link</button>`:`<p class="muted">${esc(r.opponent)} will see this approval request on their Rallysh home screen.</p>`;
+    byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Approval request sent</h1>${next}<button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to home</button></div>`;
+  }catch(error){console.error(error);alert('Could not save the match. Check Firebase rules and your internet connection.');if(submit){submit.disabled=false;submit.textContent=shareLink?'Create shareable link':'Send approval request'}}
 }
+window.createApprovalLink=async function(){const email=byId('opponentEmail')?.value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}await saveApproval(email,true)};
+window.submitRegisteredApproval=async function(){const email=draft.approval?.opponentEmail;if(!email){alert('Choose a registered opponent first.');return}await saveApproval(email,false)};
+window.acceptPending=async function(id){
+  const approval=state.pending.find(x=>x.id===id);if(!approval||approval.opponentEmail!==current.email){alert('This request must be accepted using the invited email address.');return}
+  try{await updateDoc(doc(db,'approvals',id),{status:'approved',approvedBy:auth.currentUser.uid,approvedAt:Date.now()});await updateDoc(doc(db,'posts',id),{pending:false});alert('Score approved. The match is now marked approved for both players.')}catch(error){console.error(error);alert('Could not approve this score. Publish the updated Firestore rules and try again.')}
+};
 window.likePost=async function(id){try{await updateDoc(doc(db,'posts',id),{likes:increment(1)})}catch(error){console.warn(error);alert('Could not save the like.')}};
 window.commentPost=function(){alert('Comments require the next backend update.');};
 </script>
