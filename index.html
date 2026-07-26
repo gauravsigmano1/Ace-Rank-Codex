@@ -82,7 +82,7 @@ function saveMatch(){
   let won=aWins>bWins,teamA=[current],teamB=[];if(draft.type==='singles')teamB=[draft.players.opponent];else{teamA.push(draft.players.partner);teamB=[draft.players.opponent1,draft.players.opponent2]}
   let key=draft.type==='singles'?'singles':'doubles',mk=draft.type==='singles'?'sm':'dm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=Math.round(raw/teamA.length),score=scores.map(s=>s.join('-')).join(', '),venue=byId('venueInput').value.trim();
   let registeredOpponent=teamB.find(p=>p.email);
-  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
+  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),playersA:teamA.map(p=>p.id),playersB:teamB.map(p=>p.id),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
   let action=registeredOpponent?`<div class="approval"><b>Send to ${esc(registeredOpponent.name)}</b><br><span class="muted">${esc(registeredOpponent.email)}</span><br><button class="primary wide" onclick="submitRegisteredApproval()">Send approval request</button></div>`:`<div class="approval"><b>Opponent email</b><br><input id="opponentEmail" type="email" placeholder="opponent@email.com"><br><button class="primary wide" onclick="createApprovalLink()">Create shareable link</button></div>`;
   byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Request opponent approval</h1><p class="muted">${delta>=0?'+':''}${delta} ${key} points will remain pending until accepted.</p>${action}</div>`;go(5);
 }
@@ -101,9 +101,10 @@ import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
+import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
-const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp);
+const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
 let cloudReady=false, pendingPassword='',stopApprovals=null;
 const asPlayer=(id,data)=>({id,...data});
 
@@ -192,7 +193,7 @@ window.createApprovalLink=async function(){const email=byId('opponentEmail')?.va
 window.submitRegisteredApproval=async function(){const email=draft.approval?.opponentEmail;if(!email){alert('Choose a registered opponent first.');return}await saveApproval(email,false)};
 window.acceptPending=async function(id){
   const approval=state.pending.find(x=>x.id===id);if(!approval||approval.opponentEmail!==current.email){alert('This request must be accepted using the invited email address.');return}
-  try{await updateDoc(doc(db,'approvals',id),{status:'approved',approvedBy:auth.currentUser.uid,approvedAt:Date.now()});await updateDoc(doc(db,'posts',id),{pending:false});alert('Score approved. The match is now marked approved for both players.')}catch(error){console.error(error);alert('Could not approve this score. Publish the updated Firestore rules and try again.')}
+  try{await httpsCallable(functions,'approveMatch')({approvalId:id});alert('Score approved and both players\' rankings have been updated.')}catch(error){console.error(error);alert(`Could not approve this score: ${error.code||'unknown error'}. Deploy the Rallysh Cloud Function, then try again.`)}
 };
 window.likePost=async function(id){try{await updateDoc(doc(db,'posts',id),{likes:increment(1)})}catch(error){console.warn(error);alert('Could not save the like.')}};
 window.commentPost=function(){alert('Comments require the next backend update.');};
