@@ -1,7 +1,7 @@
 {
-  "name": "Ace Rank",
-  "short_name": "Ace Rank",
-  "description": "A social tennis ranking demo.",
+  "name": "Rallysh",
+  "short_name": "Rallysh",
+  "description": "A social tennis ranking app.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f6f7f2",

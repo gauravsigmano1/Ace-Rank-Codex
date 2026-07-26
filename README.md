@@ -1,6 +1,6 @@
-# Ace Rank
+# Rallysh
 
-Ace Rank is a mobile-first tennis ranking demo for friendly clubs, social groups, and informal ladders. Log singles or doubles matches, calculate an Elo-style rating, share a court photo and venue, and follow the match feed.
+Rallysh is a mobile-first tennis ranking demo for friendly clubs, social groups, and informal ladders. Log singles or doubles matches, calculate an Elo-style rating, share a court photo and venue, and follow the match feed.
 
 ## Demo features
 
@@ -24,7 +24,7 @@ For camera and location permissions, use a hosted HTTPS version instead of openi
 
 1. Create a GitHub repository.
 2. Upload `index.html`, `README.md`, `manifest.webmanifest`, `service-worker.js`, and `ace-rank-icon.svg` to the repository root.
-3. In the repository, open **Settings** → **Pages**.
+3. In the repository, open **Settings** â†’ **Pages**.
 4. Under **Build and deployment**, choose **Deploy from a branch**.
 5. Select the `main` branch and `/(root)` folder, then save.
 6. Open the GitHub Pages URL that GitHub provides on your phone.
@@ -32,8 +32,8 @@ For camera and location permissions, use a hosted HTTPS version instead of openi
 ## Install on iPhone
 
 1. Open the GitHub Pages URL in **Safari** (not a browser shortcut created from Chrome).
-2. Tap **Share** → **Add to Home Screen** → **Add**.
-3. Delete the old Ace Rank shortcut, then launch the new Home Screen app.
+2. Tap **Share** â†’ **Add to Home Screen** â†’ **Add**.
+3. Delete the old Rallysh shortcut, then launch the new Home Screen app.
 
 The updated app is configured as a standalone Progressive Web App, so it opens without Safari/Chrome navigation bars. It must be served over HTTPS (GitHub Pages provides this) for the install and offline cache to work.
 
@@ -43,9 +43,9 @@ All players start at a rating of 1200. Ratings use the Elo expected-score formul
 
 ## Prototype notes
 
-This is a single-device demo, not a production service. Match results, photos, likes, and comments are stored only in the browser’s local storage. It does not yet include accounts, shared data, opponent confirmation, moderation, real comments, or a backend.
+This is a single-device demo, not a production service. Match results, photos, likes, and comments are stored only in the browserâ€™s local storage. It does not yet include accounts, shared data, opponent confirmation, moderation, real comments, or a backend.
 
-Court-location lookups use the browser’s location permission and OpenStreetMap’s Nominatim reverse-geocoding service when available. Players can always type a venue name manually.
+Court-location lookups use the browserâ€™s location permission and OpenStreetMapâ€™s Nominatim reverse-geocoding service when available. Players can always type a venue name manually.
 
 ## Privacy
 
