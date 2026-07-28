@@ -75,11 +75,12 @@ function cleanRenderAll(){
   byId('pendingApprovals').innerHTML=requests.map(p=>`<div class="approval"><b>Score approval request</b><br>${esc(p.author)} submitted ${esc(p.score)}.<br><button class="primary" style="margin-top:8px" onclick="acceptPending('${p.id}')">Accept score</button></div>`).join('');cleanFeed();cleanRanks();
 }
 renderAll=cleanRenderAll;renderFeed=cleanFeed;renderRanks=cleanRanks;
-function saveMatch(){
+async function saveMatch(){
   if(saving)return;let [,kind,max,weight]=draft.format,scores=[];
   for(let i=0;i<draft.sets;i++){let a=+byId('a'+i).value,b=+byId('b'+i).value;if(!Number.isFinite(a)||!Number.isFinite(b)||!validRow(a,b,kind,max)){alert(`That score is not valid for ${draft.format[0]}.`);return}scores.push([a,b])}
   let aWins=scores.filter(s=>s[0]>s[1]).length,bWins=scores.length-aWins;if(aWins===bWins){alert('A match needs a winner. Add a deciding set.');return}
   let won=aWins>bWins,teamA=[current],teamB=[];if(draft.type==='singles')teamB=[draft.players.opponent];else{teamA.push(draft.players.partner);teamB=[draft.players.opponent1,draft.players.opponent2]}
+  if(window.resolveRegisteredPlayers)teamB=await window.resolveRegisteredPlayers(teamB);
   let key=draft.type==='singles'?'singles':'doubles',mk=draft.type==='singles'?'sm':'dm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=Math.round(raw/teamA.length),score=scores.map(s=>s.join('-')).join(', '),venue=byId('venueInput').value.trim();
   let registeredOpponent=teamB.find(p=>p.email);
   draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),playersA:teamA.map(p=>p.id),playersB:teamB.map(p=>p.id),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
@@ -89,7 +90,7 @@ function saveMatch(){
 function createApprovalLink(){let email=byId('opponentEmail').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}let r=draft.approval;r.opponentEmail=email;r.pending=true;state.pending.push(r);state.posts.push({...r,likes:0,comments:0,liked:false});if(r.venue&&!state.venues.includes(r.venue))state.venues.unshift(r.venue);save();let url=`${location.origin}${location.pathname}?approval=${btoa(JSON.stringify(r))}`;byId('result').innerHTML=`<div class="result"><div class="medal">&#128279;</div><h1>Approval link ready</h1><p class="muted">Send this to ${esc(email)}. Their profile must use the same email before they can accept.</p><button class="primary wide" onclick="navigator.share?navigator.share({title:'Approve Ace Rank score',url:'${url}'}):navigator.clipboard.writeText('${url}')">Share link</button><button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to home</button></div>`}
 function acceptPending(id){let r=state.pending.find(x=>x.id===id);if(!r||r.opponentEmail!==current.email){alert('This request must be accepted using the invited email address.');return}r.accepted=true;let post=state.posts.find(x=>x.id===id);if(post)post.pending=false;save();cleanRenderAll();alert('Score accepted. A production backend will synchronize the confirmed rating change to both players.');}
 /* ASCII-safe picker labels. */
-renderPicker=function(){let q=byId('playerSearch').value.toLowerCase(),chosen=Object.values(draft.players).map(p=>p.id),users=state.users.filter(u=>u.id!==current.id&&!chosen.includes(u.id)&&u.name.toLowerCase().includes(q));byId('pickerList').innerHTML=users.length?users.map(u=>`<button onclick="pickPlayer('${u.id}')">${u.photo?`<img class="avatar" src="${u.photo}">`:`<div class="avatar">${esc(u.name[0])}</div>`}<span><b>${esc(u.name)}</b><br><small class="muted">Singles ${Math.round(u.singles)} - Doubles ${Math.round(u.doubles)}</small></span></button>`).join(''):'<div style="padding:15px" class="muted">No players yet. Use + New.</div>'};
+renderPicker=function(){let q=byId('playerSearch').value.toLowerCase(),chosen=Object.values(draft.players).map(p=>p.id),users=state.users.filter(u=>u.id!==current.id&&!chosen.includes(u.id)&&u.name.toLowerCase().includes(q));byId('pickerList').innerHTML=users.length?users.map(u=>`<button onclick="pickPlayer('${u.id}')">${u.photo?`<img class="avatar" src="${u.photo}">`:`<div class="avatar">${esc(u.name[0])}</div>`}<span><b>${esc(u.name)}</b><br><small class="muted">${u.email?'Registered player':'Invite required'} · Singles ${Math.round(u.singles)} - Doubles ${Math.round(u.doubles)}</small></span></button>`).join(''):'<div style="padding:15px" class="muted">No players yet. Use + New.</div>'};
 function seedPlayerProfiles(){const seeds=[['Parul',1175],['Ketan',1232],['Nishant',1185],['Amritsar',1200]];seeds.forEach(([name,singles])=>{if(!state.users.some(user=>user.name.toLowerCase()===name.toLowerCase()))state.users.push({id:`seed-${name.toLowerCase()}`,email:'',name,dob:'',gender:'',photo:'',singles,doubles:1200,sm:singles===1200?0:1,dm:0})});save()}
 seedPlayerProfiles();
 if(current)cleanRenderAll();
@@ -99,7 +100,7 @@ if(current)cleanRenderAll();
    not a service-account credential. Server-side secrets are never stored here. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
@@ -107,6 +108,23 @@ const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomai
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
 let cloudReady=false, pendingPassword='',stopApprovals=null;
 const asPlayer=(id,data)=>({id,...data});
+
+window.resolveRegisteredPlayers=async function(players){
+  const resolved=[];
+  for(const player of players){
+    if(player?.email){resolved.push(player);continue}
+    // Old demo players did not store an email. Look for the same display name
+    // in Firebase so a player who has since registered is recognised.
+    try{
+      const localMatch=state.users.find(u=>u.email&&u.name?.trim().toLowerCase()===player.name?.trim().toLowerCase());
+      if(localMatch){resolved.push(localMatch);continue}
+      const matches=await getDocs(query(collection(db,'users'),where('name','==',player.name)));
+      const registered=matches.docs.map(x=>asPlayer(x.id,x.data())).find(u=>u.email);
+      resolved.push(registered||player);
+    }catch(error){console.warn('Could not resolve player registration',error);resolved.push(player)}
+  }
+  return resolved;
+};
 
 function showProfileForm(){byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden')}
 function watchCloudData(){
