@@ -15,7 +15,7 @@
     .composer-actions button{font-size:0}.composer-actions button:before{display:block;color:var(--lime);font-size:22px;margin-bottom:4px}.composer-actions button:first-child:before{content:'\1F4F7'}.composer-actions button:nth-child(2):before{content:'\1F4CD'}.composer-actions button b{font-size:15px}.composer-actions button span{font-size:12px}
   </style>
 </head>
-<body><div id="auth" class="modal"><div class="modal-card"><h1>Welcome to Rallysh</h1><p class="muted">Create a player profile to start your ladder.</p><div id="loginForm"><label>Email<input id="loginEmail" type="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Continue with email</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px"><i style="height:1px;background:var(--line);flex:1"></i>OR<i style="height:1px;background:var(--line);flex:1"></i></div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button></div><div id="profileForm" class="hidden"><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><label>Date of birth<input id="profileDob" type="date"></label><label>Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option></select></label><button class="primary wide" onclick="createProfile()">Create profile</button></div></div></div>
+<body><div id="auth" class="modal"><div class="modal-card"><h1>Welcome to Rallysh</h1><p class="muted">Create a player profile to start your ladder.</p><div id="loginForm"><label>Email<input id="loginEmail" type="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Continue with email</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px"><i style="height:1px;background:var(--line);flex:1"></i>OR<i style="height:1px;background:var(--line);flex:1"></i></div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button></div><div id="profileForm" class="hidden"><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input id="profilePhotoInput" type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><p id="googleProfileNote" class="muted hidden">Your Google name, email, and profile photo have been added. Google does not provide date of birth or gender through basic sign-in, so these are saved as not specified.</p><label id="profileDobLabel">Date of birth<input id="profileDob" type="date"></label><label id="profileGenderLabel">Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option><option>Not specified</option></select></label><button class="primary wide" onclick="createProfile()">Create profile</button></div></div></div>
 <div class="app"><header><div class="brand">Rally<b>sh</b></div><button class="chip" onclick="openProfile()" id="userChip">Profile</button></header><main>
 <section class="screen active" id="home"><div class="hero"><div class="eyebrow">Your singles rating</div><div class="rating" id="singlesRating">1200 <small>SR</small></div><div class="chip" id="doublesRating">Doubles 1200 DR</div></div><div class="stats"><div class="stat"><small class="muted">Singles matches</small><strong id="singlesMatches">0</strong></div><div class="stat"><small class="muted">Doubles matches</small><strong id="doublesMatches">0</strong></div></div><div id="pendingApprovals"></div><button class="primary wide" onclick="newMatch()">Log a match</button><div class="section"><h2>Match feed</h2><span class="muted">Last 5</span></div><div id="feed" class="feed"></div></section>
 <section class="screen" id="match"><button class="ghost" onclick="show('home')">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back</button><div class="progress"><i id="progress"></i></div>
@@ -106,7 +106,7 @@ import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
-let cloudReady=false, pendingPassword='',stopApprovals=null;
+let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false;
 const asPlayer=(id,data)=>({id,...data});
 
 window.resolveRegisteredPlayers=async function(players){
@@ -126,7 +126,12 @@ window.resolveRegisteredPlayers=async function(players){
   return resolved;
 };
 
-function showProfileForm(){byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden')}
+function showProfileForm(user=auth.currentUser){
+  const isGoogle=!!user?.providerData?.some(p=>p.providerId==='google.com');
+  googleProfileSignup=isGoogle;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden');
+  byId('googleProfileNote').classList.toggle('hidden',!isGoogle);byId('profileDobLabel').classList.toggle('hidden',isGoogle);byId('profileGenderLabel').classList.toggle('hidden',isGoogle);
+  if(isGoogle){byId('loginEmail').value=user.email||'';byId('profileName').value=user.displayName||'';byId('profilePreview').src=user.photoURL||'';profilePhoto='';}
+}
 function watchCloudData(){
   onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll()},err=>console.warn('Could not load Rallysh users',err));
   onSnapshot(query(collection(db,'posts'),orderBy('createdAt','desc'),limit(20)),snap=>{state.posts=snap.docs.map(x=>({id:x.id,...x.data()}));if(current)renderFeed()},err=>console.warn('Could not load Rallysh posts',err));
@@ -136,8 +141,17 @@ function watchCloudData(){
 onAuthStateChanged(auth,async user=>{
   if(!user){current=null;byId('auth').classList.remove('hidden');return}
   const profile=await getDoc(doc(db,'users',user.uid));
-  if(!profile.exists()){showProfileForm();return}
-  current=asPlayer(profile.id,profile.data());byId('auth').classList.add('hidden');watchCloudData();renderAll();
+  if(!profile.exists()){showProfileForm(user);return}
+  let profileData=profile.data();
+  // Repair profiles created by earlier Google sign-ins, which did not copy the
+  // Firebase account email into Firestore.
+  if(user.providerData?.some(p=>p.providerId==='google.com')&&!profileData.email&&user.email){
+    const repair={email:user.email,provider:'google'};
+    if(!profileData.name&&user.displayName)repair.name=user.displayName;
+    if(!profileData.photo&&user.photoURL)repair.photo=user.photoURL;
+    await setDoc(doc(db,'users',user.uid),repair,{merge:true});profileData={...profileData,...repair};
+  }
+  current=asPlayer(profile.id,profileData);byId('auth').classList.add('hidden');watchCloudData();renderAll();
 });
 
 window.login=async function(){
@@ -170,15 +184,15 @@ window.loginWithGoogle=async function(){
   }
 }
 window.createProfile=async function(){
-  const name=byId('profileName').value.trim(),email=byId('loginEmail').value.trim().toLowerCase(),dob=byId('profileDob').value,gender=byId('profileGender').value;
-  if(!name||!dob||!gender){alert('Add name, date of birth, and gender.');return}
+  const name=byId('profileName').value.trim(),signedInEmail=(auth.currentUser?.email||'').trim().toLowerCase(),typedEmail=byId('loginEmail').value.trim().toLowerCase(),email=signedInEmail||typedEmail,dob=byId('profileDob').value,gender=byId('profileGender').value;
+  if(!name||!email||(!googleProfileSignup&&(!dob||!gender))){alert('Add name, date of birth, and gender.');return}
   try{
     let user=auth.currentUser;
     if(!user){if(!pendingPassword){alert('Enter a password first.');return}user=(await createUserWithEmailAndPassword(auth,email,pendingPassword)).user}
     let photo=user?.photoURL||'';
     if(profilePhoto){const imageRef=ref(storage,`profile-photos/${user.uid}/profile.jpg`);await uploadString(imageRef,profilePhoto,'data_url');photo=await getDownloadURL(imageRef)}
-    const profile={email,name,dob,gender,photo,singles:1200,doubles:1200,sm:0,dm:0,createdAt:Date.now()};
-    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};byId('auth').classList.add('hidden');watchCloudData();renderAll();
+    const profile={email,name,dob:googleProfileSignup?(dob||'Not specified'):dob,gender:googleProfileSignup?(gender||'Not specified'):gender,photo,singles:1200,doubles:1200,sm:0,dm:0,provider:googleProfileSignup?'google':'password',createdAt:Date.now()};
+    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};googleProfileSignup=false;byId('auth').classList.add('hidden');watchCloudData();renderAll();
   }catch(error){
     console.error(error);
     const reason=error?.code||'unknown error';
