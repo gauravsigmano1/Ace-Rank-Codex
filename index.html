@@ -15,7 +15,7 @@
     .composer-actions button{font-size:0}.composer-actions button:before{display:block;color:var(--lime);font-size:22px;margin-bottom:4px}.composer-actions button:first-child:before{content:'\1F4F7'}.composer-actions button:nth-child(2):before{content:'\1F4CD'}.composer-actions button b{font-size:15px}.composer-actions button span{font-size:12px}
   </style>
 </head>
-<body><div id="auth" class="modal"><div class="modal-card"><h1>Welcome to Rallysh</h1><p class="muted">Create a player profile to start your ladder.</p><div id="loginForm"><label>Email<input id="loginEmail" type="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Continue with email</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px"><i style="height:1px;background:var(--line);flex:1"></i>OR<i style="height:1px;background:var(--line);flex:1"></i></div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button></div><div id="profileForm" class="hidden"><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input id="profilePhotoInput" type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><p id="googleProfileNote" class="muted hidden">Your Google name, email, and profile photo have been added. Google does not provide date of birth or gender through basic sign-in, so these are saved as not specified.</p><label id="profileDobLabel">Date of birth<input id="profileDob" type="date"></label><label id="profileGenderLabel">Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option><option>Not specified</option></select></label><button class="primary wide" onclick="createProfile()">Create profile</button></div></div></div>
+<body><div id="auth" class="modal"><div class="modal-card"><h1>Welcome to Rallysh</h1><p class="muted">Create a player profile to start your ladder.</p><div id="loginForm"><label>Email<input id="loginEmail" type="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Continue with email</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px"><i style="height:1px;background:var(--line);flex:1"></i>OR<i style="height:1px;background:var(--line);flex:1"></i></div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button></div><div id="profileForm" class="hidden"><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input id="profilePhotoInput" type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><p id="googleProfileNote" class="muted hidden">Your Google name, email, and profile photo have been added. Continue to complete your Rallysh profile.</p><label id="profileDobLabel">Date of birth<input id="profileDob" type="date"></label><label id="profileGenderLabel">Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option></select></label><button id="createProfileButton" class="primary wide" onclick="createProfile()">Create profile</button></div></div></div>
 <div class="app"><header><div class="brand">Rally<b>sh</b></div><button class="chip" onclick="openProfile()" id="userChip">Profile</button></header><main>
 <section class="screen active" id="home"><div class="hero"><div class="eyebrow">Your singles rating</div><div class="rating" id="singlesRating">1200 <small>SR</small></div><div class="chip" id="doublesRating">Doubles 1200 DR</div></div><div class="stats"><div class="stat"><small class="muted">Singles matches</small><strong id="singlesMatches">0</strong></div><div class="stat"><small class="muted">Doubles matches</small><strong id="doublesMatches">0</strong></div></div><div id="pendingApprovals"></div><button class="primary wide" onclick="newMatch()">Log a match</button><div class="section"><h2>Match feed</h2><span class="muted">Last 5</span></div><div id="feed" class="feed"></div></section>
 <section class="screen" id="match"><button class="ghost" onclick="show('home')">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back</button><div class="progress"><i id="progress"></i></div>
@@ -62,7 +62,10 @@ function likePost(id){let p=state.posts.find(x=>x.id===id);p.liked=!p.liked;p.li
 <script>
 /* Clean rendering and approval workflow. All symbols use HTML entities or CSS escapes. */
 function cleanFeed(){
-  let posts=state.posts.slice(-5).reverse();
+  const idsFor=p=>[...(Array.isArray(p.playersA)?p.playersA:[p.authorUid]),...(Array.isArray(p.playersB)?p.playersB:[])].filter(Boolean);
+  const myMatches=state.posts.filter(p=>idsFor(p).includes(current.id));
+  const familiarPlayers=new Set(myMatches.flatMap(idsFor).filter(id=>id!==current.id));
+  let posts=state.posts.filter(p=>{const ids=idsFor(p);return ids.includes(current.id)||ids.some(id=>familiarPlayers.has(id))}).slice(-5).reverse();
   byId('feed').innerHTML=posts.length?posts.map(p=>`<article class="post">${p.photo?`<img src="${p.photo}" alt="Court match post">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc(p.author[0])}</div><div class="grow"><b>${esc(p.author)}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'} ${esc(p.score)}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${p.delta}</b></div>${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}<div class="actions"><button class="${p.liked?'liked':''}" onclick="likePost('${p.id}')">Like</button><button onclick="commentPost('${p.id}')">Comment</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;
 }
 function cleanRanks(){
@@ -106,7 +109,7 @@ import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
-let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false;
+let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false,googleProfileStep=0;
 const asPlayer=(id,data)=>({id,...data});
 
 window.resolveRegisteredPlayers=async function(players){
@@ -128,8 +131,9 @@ window.resolveRegisteredPlayers=async function(players){
 
 function showProfileForm(user=auth.currentUser){
   const isGoogle=!!user?.providerData?.some(p=>p.providerId==='google.com');
-  googleProfileSignup=isGoogle;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden');
+  googleProfileSignup=isGoogle;googleProfileStep=isGoogle?1:0;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden');
   byId('googleProfileNote').classList.toggle('hidden',!isGoogle);byId('profileDobLabel').classList.toggle('hidden',isGoogle);byId('profileGenderLabel').classList.toggle('hidden',isGoogle);
+  byId('createProfileButton').textContent=isGoogle?'Continue':'Create profile';
   if(isGoogle){byId('loginEmail').value=user.email||'';byId('profileName').value=user.displayName||'';byId('profilePreview').src=user.photoURL||'';profilePhoto='';}
 }
 function watchCloudData(){
@@ -185,14 +189,18 @@ window.loginWithGoogle=async function(){
 }
 window.createProfile=async function(){
   const name=byId('profileName').value.trim(),signedInEmail=(auth.currentUser?.email||'').trim().toLowerCase(),typedEmail=byId('loginEmail').value.trim().toLowerCase(),email=signedInEmail||typedEmail,dob=byId('profileDob').value,gender=byId('profileGender').value;
-  if(!name||!email||(!googleProfileSignup&&(!dob||!gender))){alert('Add name, date of birth, and gender.');return}
+  if(googleProfileSignup&&googleProfileStep===1){
+    if(!name||!email){alert('A name and email are required.');return}
+    googleProfileStep=2;byId('profileDobLabel').classList.remove('hidden');byId('profileGenderLabel').classList.remove('hidden');byId('googleProfileNote').textContent='One last step: add your date of birth and gender to complete your Rallysh profile.';byId('createProfileButton').textContent='Create profile';return;
+  }
+  if(!name||!email||!dob||!gender){alert('Add name, date of birth, and gender.');return}
   try{
     let user=auth.currentUser;
     if(!user){if(!pendingPassword){alert('Enter a password first.');return}user=(await createUserWithEmailAndPassword(auth,email,pendingPassword)).user}
     let photo=user?.photoURL||'';
     if(profilePhoto){const imageRef=ref(storage,`profile-photos/${user.uid}/profile.jpg`);await uploadString(imageRef,profilePhoto,'data_url');photo=await getDownloadURL(imageRef)}
-    const profile={email,name,dob:googleProfileSignup?(dob||'Not specified'):dob,gender:googleProfileSignup?(gender||'Not specified'):gender,photo,singles:1200,doubles:1200,sm:0,dm:0,provider:googleProfileSignup?'google':'password',createdAt:Date.now()};
-    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};googleProfileSignup=false;byId('auth').classList.add('hidden');watchCloudData();renderAll();
+    const profile={email,name,dob,gender,photo,singles:1200,doubles:1200,sm:0,dm:0,provider:googleProfileSignup?'google':'password',createdAt:Date.now()};
+    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};googleProfileSignup=false;googleProfileStep=0;byId('auth').classList.add('hidden');watchCloudData();renderAll();
   }catch(error){
     console.error(error);
     const reason=error?.code||'unknown error';
@@ -210,6 +218,9 @@ async function saveApproval(email,shareLink){
   if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
   if(!auth.currentUser||!draft.approval){alert('Please sign in again and retry.');return}
   const r=draft.approval;r.opponentEmail=email;r.pending=true;r.authorUid=auth.currentUser.uid;
+  // Preserve the invite email with the temporary player so the backend can
+  // associate that player with the account created from the shared link.
+  if(Array.isArray(r.opponents))r.opponents=r.opponents.map((player,index)=>index===0&&!player.email?{...player,email}:player);
   const submit=byId('result').querySelector('.primary');if(submit){submit.disabled=true;submit.textContent='Saving match...'}
   try{
     if(r.photo){const imageRef=ref(storage,`court-photos/${auth.currentUser.uid}/${r.id}.jpg`);await uploadString(imageRef,r.photo,'data_url');r.photo=await getDownloadURL(imageRef)}
@@ -225,7 +236,7 @@ window.createApprovalLink=async function(){const email=byId('opponentEmail')?.va
 window.submitRegisteredApproval=async function(){const email=draft.approval?.opponentEmail;if(!email){alert('Choose a registered opponent first.');return}await saveApproval(email,false)};
 window.acceptPending=async function(id){
   const approval=state.pending.find(x=>x.id===id);if(!approval||approval.opponentEmail!==current.email){alert('This request must be accepted using the invited email address.');return}
-  try{await httpsCallable(functions,'approveMatch')({approvalId:id});alert('Score approved and both players\' rankings have been updated.')}catch(error){console.error(error);alert(`Could not approve this score: ${error.code||'unknown error'}. Deploy the Rallysh Cloud Function, then try again.`)}
+  try{await httpsCallable(functions,'approveMatch')({approvalId:id});alert('Score approved and both players\' rankings have been updated.')}catch(error){console.error(error);const code=error.code||'unknown error';const message=code==='functions/failed-precondition'?'This match was created before all required player details were saved. Create a new match after both players have profiles.':`Could not approve this score: ${code}. Deploy the updated Rallysh Cloud Function, then try again.`;alert(message)}
 };
 window.likePost=async function(id){try{await updateDoc(doc(db,'posts',id),{likes:increment(1)})}catch(error){console.warn(error);alert('Could not save the like.')}};
 window.commentPost=function(){alert('Comments require the next backend update.');};
