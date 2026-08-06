@@ -1,5 +1,5 @@
-const CACHE = 'rallysh-v7';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './ace-rank-icon.svg'];
+const CACHE = 'rallysh-v8';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './ace-rank-icon.svg', './rallysh-opening-preview.jpg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));

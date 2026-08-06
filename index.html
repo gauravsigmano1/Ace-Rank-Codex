@@ -14,7 +14,8 @@
     .score-row b{font-size:0}.score-row b:after{content:'vs';font-size:14px}
     .composer-actions button{font-size:0}.composer-actions button:before{display:block;color:var(--lime);font-size:22px;margin-bottom:4px}.composer-actions button:first-child:before{content:'\1F4F7'}.composer-actions button:nth-child(2):before{content:'\1F4CD'}.composer-actions button b{font-size:15px}.composer-actions button span{font-size:12px}
   </style>
-  <style>html.session-checking #auth{display:none!important}</style>
+  <link rel="preload" as="image" href="rallysh-opening-preview.jpg">
+  <style>html.session-checking body>*{visibility:hidden!important}html.session-checking:before{content:'';position:fixed;inset:0;z-index:99999;background:#03150f url('rallysh-opening-preview.jpg') center/cover no-repeat}</style>
   <script>document.documentElement.classList.add('session-checking');</script>
 </head>
 <body><div id="auth" class="modal"><div class="modal-card"><h1>Welcome to Rallysh</h1><p class="muted">Create a player profile to start your ladder.</p><div id="loginForm"><label>Email<input id="loginEmail" type="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Continue with email</button><div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px"><i style="height:1px;background:var(--line);flex:1"></i>OR<i style="height:1px;background:var(--line);flex:1"></i></div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button></div><div id="profileForm" class="hidden"><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input id="profilePhotoInput" type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><p id="googleProfileNote" class="muted hidden">Your Google name, email, and profile photo have been added. Continue to complete your Rallysh profile.</p><label id="profileDobLabel">Date of birth<input id="profileDob" type="date"></label><label id="profileGenderLabel">Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option></select></label><button id="createProfileButton" class="primary wide" onclick="createProfile()">Create profile</button></div></div></div>
@@ -132,6 +133,7 @@ import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
 let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false,googleProfileStep=0;
+const splashStartedAt=Date.now();let splashDismissed=false;function dismissSplash(){if(splashDismissed)return;splashDismissed=true;setTimeout(()=>document.documentElement.classList.remove('session-checking'),Math.max(0,450-(Date.now()-splashStartedAt)))}
 window.inviteContext=(()=>{try{const raw=new URLSearchParams(location.search).get('invite');return raw?JSON.parse(raw):null}catch{return null}})();
 const asPlayer=(id,data)=>({id,...data});
 
@@ -162,16 +164,16 @@ function showProfileForm(user=auth.currentUser){
   else if(invitedName)byId('profileName').value=invitedName;
 }
 function watchCloudData(){
-  onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll()},err=>console.warn('Could not load Rallysh users',err));
+  onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll();dismissSplash()},err=>{console.warn('Could not load Rallysh users',err);dismissSplash()});
   onSnapshot(query(collection(db,'posts'),orderBy('createdAt','desc'),limit(100)),snap=>{state.posts=snap.docs.map(x=>({id:x.id,...x.data()}));if(current)renderFeed()},err=>console.warn('Could not load Rallysh posts',err));
   if(stopApprovals)stopApprovals();
   stopApprovals=onSnapshot(query(collection(db,'approvals'),where('opponentEmail','==',current.email),where('status','==','pending')),snap=>{state.pending=snap.docs.map(x=>({id:x.id,...x.data()}));renderAll()},err=>console.warn('Could not load Rallysh approvals',err));
 }
 onAuthStateChanged(auth,async user=>{
   try{
-  if(!user){current=null;document.documentElement.classList.remove('session-checking');byId('auth').classList.remove('hidden');return}
+  if(!user){current=null;dismissSplash();byId('auth').classList.remove('hidden');return}
   const profile=await getDoc(doc(db,'users',user.uid));
-  if(!profile.exists()){document.documentElement.classList.remove('session-checking');showProfileForm(user);return}
+  if(!profile.exists()){dismissSplash();showProfileForm(user);return}
   let profileData=profile.data();
   // Repair profiles created by earlier Google sign-ins, which did not copy the
   // Firebase account email into Firestore.
@@ -181,8 +183,8 @@ onAuthStateChanged(auth,async user=>{
     if(!profileData.photo&&user.photoURL)repair.photo=user.photoURL;
     await setDoc(doc(db,'users',user.uid),repair,{merge:true});profileData={...profileData,...repair};
   }
-  current=asPlayer(profile.id,profileData);document.documentElement.classList.remove('session-checking');byId('auth').classList.add('hidden');watchCloudData();renderAll();
-  }catch(error){console.error('Could not restore Rallysh session',error);document.documentElement.classList.remove('session-checking');byId('auth').classList.remove('hidden');}
+  current=asPlayer(profile.id,profileData);byId('auth').classList.add('hidden');watchCloudData();renderAll();setTimeout(dismissSplash,1800);
+  }catch(error){console.error('Could not restore Rallysh session',error);dismissSplash();byId('auth').classList.remove('hidden');}
 });
 
 window.login=async function(){
