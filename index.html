@@ -125,7 +125,7 @@ if(current)cleanRenderAll();
 /* Rallysh cloud data layer — Firebase configuration is public client configuration,
    not a service-account credential. Server-side secrets are never stored here. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
-import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut,sendEmailVerification,sendPasswordResetEmail,verifyPasswordResetCode,confirmPasswordReset,applyActionCode} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
@@ -156,7 +156,7 @@ window.resolveRegisteredPlayers=async function(players){
 
 function showProfileForm(user=auth.currentUser){
   const isGoogle=!!user?.providerData?.some(p=>p.providerId==='google.com');
-  googleProfileSignup=isGoogle;googleProfileStep=isGoogle?1:0;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('profileForm').classList.remove('hidden');
+  googleProfileSignup=isGoogle;googleProfileStep=isGoogle?1:0;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('registerForm')?.classList.add('hidden');byId('verifyEmailForm')?.classList.add('hidden');byId('resetPasswordForm')?.classList.add('hidden');byId('profileForm').classList.remove('hidden');
   byId('googleProfileNote').classList.toggle('hidden',!isGoogle);byId('profileDobLabel').classList.toggle('hidden',isGoogle);byId('profileGenderLabel').classList.toggle('hidden',isGoogle);
   byId('createProfileButton').textContent=isGoogle?'Continue':'Create profile';
   const invitedName=window.inviteContext?.name||'';
@@ -171,9 +171,9 @@ function watchCloudData(){
 }
 onAuthStateChanged(auth,async user=>{
   try{
-  if(!user){current=null;dismissSplash();byId('auth').classList.remove('hidden');return}
+  if(!user){current=null;dismissSplash();window.showLogin?.();return}
   const profile=await getDoc(doc(db,'users',user.uid));
-  if(!profile.exists()){dismissSplash();showProfileForm(user);return}
+  if(!profile.exists()){dismissSplash();if(user.providerData?.some(p=>p.providerId==='password')&&!user.emailVerified){window.showVerificationPending?.(user);return}showProfileForm(user);return}
   let profileData=profile.data();
   // Repair profiles created by earlier Google sign-ins, which did not copy the
   // Firebase account email into Firestore.
@@ -190,9 +190,8 @@ onAuthStateChanged(auth,async user=>{
 window.login=async function(){
   const email=byId('loginEmail').value.trim().toLowerCase(),password=byId('loginPassword').value;
   if(!email||!password){alert('Enter your email and password.');return}
-  pendingPassword=password;
   try{await signInWithEmailAndPassword(auth,email,password)}catch(error){
-    if(error.code==='auth/user-not-found'||error.code==='auth/invalid-credential'){showProfileForm()}else alert('Unable to sign in. Please check your email and password.')
+    if(error.code==='auth/user-not-found'||error.code==='auth/invalid-credential')alert('We could not sign you in. Check your email and password, or register for a new account.');else alert('Unable to sign in. Please try again.')
   }
 }
 window.loginWithGoogle=async function(){
@@ -270,6 +269,39 @@ window.acceptPending=async function(id){
 };
 window.likePost=async function(id){try{await updateDoc(doc(db,'posts',id),{likes:increment(1)})}catch(error){console.warn(error);alert('Could not save the like.')}};
 window.commentPost=function(){alert('Comments require the next backend update.');};
+const publicAppUrl=location.protocol==='file:'?'https://gauravsigmano1.github.io/Ace-Rank-Codex/':`${location.origin}${location.pathname}`;
+const emailActionSettings={url:publicAppUrl,handleCodeInApp:true};
+window.startEmailRegistration=async function(){
+  const email=byId('registerEmail').value.trim().toLowerCase(),password=byId('registerPassword').value;
+  if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid email address.');return}
+  if(password.length<6){alert('Choose a password with at least 6 characters.');return}
+  try{const credential=await createUserWithEmailAndPassword(auth,email,password);await sendEmailVerification(credential.user,emailActionSettings);window.showVerificationPending?.(credential.user)}catch(error){console.error(error);alert(error.code==='auth/email-already-in-use'?'This email already has an account. Sign in instead.':`Could not register: ${error.code||'unknown error'}.`)}
+};
+window.resendVerification=async function(){try{if(!auth.currentUser)throw new Error('Sign in again first.');await sendEmailVerification(auth.currentUser,emailActionSettings);alert(`A new confirmation email was sent to ${auth.currentUser.email}.`)}catch(error){console.error(error);alert(`Could not send the confirmation email: ${error.code||error.message}`)}};
+window.requestPasswordReset=async function(){const email=byId('resetEmail').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid email address.');return}try{await sendPasswordResetEmail(auth,email,emailActionSettings);window.showResetSent?.(email)}catch(error){console.error(error);alert(`Could not send the reset email: ${error.code||'unknown error'}.`)}};
+window.finishPasswordReset=async function(){const password=byId('newPassword').value,confirm=byId('confirmPassword').value;if(password.length<6){alert('Choose a password with at least 6 characters.');return}if(password!==confirm){alert('The new passwords do not match.');return}try{await confirmPasswordReset(auth,window.resetCode,password);window.resetCode='';history.replaceState({},'',location.pathname);window.showLogin?.();alert('Password updated. You can now sign in.')}catch(error){console.error(error);alert(`Could not update the password: ${error.code||'unknown error'}. Request a new reset link and try again.`)}};
+async function handleEmailAction(){const params=new URLSearchParams(location.search),mode=params.get('mode'),code=params.get('oobCode');if(!mode||!code)return;try{if(mode==='verifyEmail'){await applyActionCode(auth,code);history.replaceState({},'',location.pathname);if(auth.currentUser){await auth.currentUser.reload();showProfileForm(auth.currentUser)}else{window.showLogin?.();alert('Email confirmed. Sign in to complete your profile.')}}else if(mode==='resetPassword'){const email=await verifyPasswordResetCode(auth,code);window.resetCode=code;window.showPasswordReset?.(email)}}catch(error){console.error(error);history.replaceState({},'',location.pathname);window.showLogin?.();alert('This email link is invalid or has expired. Request a new one and try again.')}}
+handleEmailAction();
+</script>
+<style>
+  .auth-switch{text-align:center;color:var(--muted);margin:16px 0 0}.auth-link{background:none;color:var(--lime);font-weight:800;padding:0;text-decoration:underline}.auth-note{padding:12px;background:#1b2949;border:1px solid #3d5791;border-radius:12px;color:#c7d6ff;font-size:13px}.google-register{background:#fff!important;color:#18213c!important;margin-bottom:10px}.auth-divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px}.auth-divider:before,.auth-divider:after{content:'';height:1px;background:var(--line);flex:1}
+</style>
+<script>
+/* Separate sign-in, registration, verification, and password-reset views. */
+document.querySelector('#auth .modal-card').innerHTML=`
+  <div id="loginForm"><h1>Welcome back</h1><p class="muted">Sign in to your Rallysh profile.</p><label>Email<input id="loginEmail" type="email" autocomplete="email" placeholder="you@email.com"></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password"></label><button class="primary wide" onclick="login()">Sign in</button><p class="auth-switch"><button class="auth-link" onclick="showForgotPassword()">Forgot password?</button></p><div class="auth-divider">OR</div><button class="secondary wide" onclick="loginWithGoogle()" style="background:#fff;color:#18213c">G&nbsp;&nbsp; Continue with Google</button><p class="auth-switch">New to Rallysh? <button class="auth-link" onclick="showRegistration()">Create an account</button></p></div>
+  <div id="registerForm" class="hidden"><h1>Create your account</h1><p class="muted">Start your Rallysh ranking in a minute.</p><button class="primary wide google-register" onclick="loginWithGoogle()">G&nbsp;&nbsp; Register with Google</button><div class="auth-divider">OR</div><label>Email<input id="registerEmail" type="email" autocomplete="email" placeholder="you@email.com"></label><label>Password<input id="registerPassword" type="password" autocomplete="new-password" placeholder="Create a password"></label><button class="primary wide" onclick="startEmailRegistration()">Register with email</button><p class="auth-switch">Already registered? <button class="auth-link" onclick="showLogin()">Sign in</button></p></div>
+  <div id="verifyEmailForm" class="hidden"><h1>Confirm your email</h1><p class="muted" id="verificationText">We sent a confirmation link to your email address.</p><div class="auth-note">Open the email on this device and tap the link. You will return to Rallysh to complete your player profile.</div><button class="primary wide" style="margin-top:14px" onclick="resendVerification()">Resend confirmation email</button><p class="auth-switch"><button class="auth-link" onclick="showLogin()">Back to sign in</button></p></div>
+  <div id="forgotPasswordForm" class="hidden"><h1>Reset your password</h1><p class="muted">Enter your email and we will send a reset link.</p><label>Email<input id="resetEmail" type="email" autocomplete="email" placeholder="you@email.com"></label><button class="primary wide" onclick="requestPasswordReset()">Send reset email</button><p class="auth-switch"><button class="auth-link" onclick="showLogin()">Back to sign in</button></p></div>
+  <div id="resetPasswordForm" class="hidden"><h1>Choose a new password</h1><p class="muted" id="resetForEmail"></p><label>New password<input id="newPassword" type="password" autocomplete="new-password" placeholder="At least 6 characters"></label><label>Confirm password<input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat your new password"></label><button class="primary wide" onclick="finishPasswordReset()">Update password</button></div>
+  <div id="profileForm" class="hidden"><h1>Complete your profile</h1><p class="muted">Add the details that appear on Rallysh.</p><img id="profilePreview" class="profile-photo" alt="Profile preview"><label>Profile picture<input id="profilePhotoInput" type="file" accept="image/*" onchange="setProfilePhoto(this)"></label><label>Display name<input id="profileName" placeholder="Your name"></label><p id="googleProfileNote" class="muted hidden">Your Google name, email, and profile photo have been added. Continue to complete your Rallysh profile.</p><label id="profileDobLabel">Date of birth<input id="profileDob" type="date"></label><label id="profileGenderLabel">Gender<select id="profileGender"><option value="">Choose one</option><option>Male</option><option>Female</option></select></label><button id="createProfileButton" class="primary wide" onclick="createProfile()">Create profile</button></div>`;
+function authView(id){['loginForm','registerForm','verifyEmailForm','forgotPasswordForm','resetPasswordForm','profileForm'].forEach(view=>byId(view)?.classList.toggle('hidden',view!==id));byId('auth').classList.remove('hidden')}
+window.showLogin=function(){authView('loginForm')};
+window.showRegistration=function(){authView('registerForm')};
+window.showForgotPassword=function(){authView('forgotPasswordForm')};
+window.showVerificationPending=function(user){authView('verifyEmailForm');byId('verificationText').textContent=`We sent a confirmation link to ${user?.email||'your email address'}.`};
+window.showResetSent=function(email){byId('resetEmail').value='';alert(`A password-reset email was sent to ${email}. Open its link on this device.`);showLogin()};
+window.showPasswordReset=function(email){authView('resetPasswordForm');byId('resetForEmail').textContent=`Resetting password for ${email}.`};
 </script>
 <style>
   #match.quick-mode>.ghost,#match.quick-mode>.progress,#match.quick-mode>.step{display:none!important}
