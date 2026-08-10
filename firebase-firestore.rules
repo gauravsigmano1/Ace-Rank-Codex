@@ -12,7 +12,7 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
       // Temporary social interaction rule. Replace likes/comments with subcollections
       // or Cloud Functions before a public launch.
-      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','comments']);
+      allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','likedBy','comments','commentItems']);
       allow delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
     }
 

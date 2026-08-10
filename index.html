@@ -76,7 +76,8 @@ function cleanFeed(){
   const connectedSince=new Map();
   myMatches.forEach(p=>idsFor(p).filter(id=>id!==current.id).forEach(id=>{const time=postTime(p),previous=connectedSince.get(id);if(previous===undefined||time<previous)connectedSince.set(id,time)}));
   let posts=state.posts.filter(p=>{const ids=idsFor(p);if(ids.includes(current.id))return true;const time=postTime(p);return ids.some(id=>connectedSince.has(id)&&time>=connectedSince.get(id))}).slice(0,5);
-  byId('feed').innerHTML=posts.length?posts.map(p=>`<article class="post">${p.photo?`<img src="${p.photo}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}<div class="actions"><button class="${p.liked?'liked':''}" onclick="likePost('${p.id}')">Like</button><button onclick="commentPost('${p.id}')">Comment</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;
+  const postMarkup=p=>{const likedBy=Array.isArray(p.likedBy)?p.likedBy:[],liked=!!current&&likedBy.includes(current.id),commentItems=Array.isArray(p.commentItems)?p.commentItems:[];return `<article class="post">${p.photo?`<img src="${p.photo}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}${commentItems.length?`<div class="comment-list">${commentItems.map(comment=>`<p><b>${esc(comment.author||'Player')}</b> ${esc(comment.text||'')}</p>`).join('')}</div>`:''}<div class="actions"><button class="${liked?'liked':''}" onclick="likePost('${p.id}')">${liked?'Liked':'Like'} (${Number(p.likes)||0})</button><button onclick="commentPost('${p.id}')">Comment (${Number(p.comments)||commentItems.length})</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`};
+  byId('feed').innerHTML=posts.length?posts.map(postMarkup).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;
 }
 function cleanRanks(){
   const idsFor=p=>[...(Array.isArray(p.playersA)?p.playersA:[p.authorUid]),...(Array.isArray(p.playersB)?p.playersB:[])].filter(Boolean);
@@ -103,6 +104,13 @@ async function saveMatch(){
   let key='singles',mk='sm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=Math.round(raw/teamA.length),score=scores.map(s=>s.join('-')).join(', '),venue=byId('venueInput').value.trim();
   let registeredOpponent=teamB.find(p=>p.email);
   draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),playersA:teamA.map(p=>p.id),playersB:teamB.map(p=>p.id),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
+  // A selected registered player already has a Rallysh inbox. Save their
+  // request immediately from the optional court step and return to Home.
+  if(registeredOpponent){
+    saving=true;
+    try{await window.saveApproval(registeredOpponent.email,false,true)}finally{saving=false}
+    return;
+  }
   let action=registeredOpponent?`<div class="approval"><b>Send to ${esc(registeredOpponent.name)}</b><br><span class="muted">${esc(registeredOpponent.email)}</span><br><button class="primary wide" onclick="submitRegisteredApproval()">Send approval request</button></div>`:`<div class="approval"><b>Invite ${esc(draft.approval.opponent)}</b><br><span class="muted">Share the match link. Their name and score will be prefilled when they register.</span><br><button class="primary wide" onclick="createApprovalLink()">Create shareable link</button></div>`;
   byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Request opponent approval</h1><p class="muted">${delta>=0?'+':''}${delta} ${key} points will remain pending until accepted.</p>${action}</div>`;go(5);
 }
@@ -126,7 +134,7 @@ if(current)cleanRenderAll();
    not a service-account credential. Server-side secrets are never stored here. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut,sendEmailVerification,sendPasswordResetEmail,verifyPasswordResetCode,confirmPasswordReset,applyActionCode} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment,runTransaction} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
@@ -242,7 +250,7 @@ window.createProfile=async function(){
 window.openProfile=function(){if(!current)return;alert('Profile editing will be added in the next backend update. Sign-out is available from the device app settings.')}
 window.cloudLogout=()=>signOut(auth);
 
-async function saveApproval(email,shareLink){
+async function saveApproval(email,shareLink,returnHome=false){
   if(email&&!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
   if(!auth.currentUser||!draft.approval){alert('Please sign in again and retry.');return}
   const r=draft.approval;r.opponentEmail=email||'';r.pending=true;r.authorUid=auth.currentUser.uid;r.inviteToken=r.inviteToken||crypto.randomUUID();
@@ -255,20 +263,61 @@ async function saveApproval(email,shareLink){
     const match={...r,createdAt:Date.now(),likes:0,comments:0,liked:false};
     await setDoc(doc(db,'posts',r.id),match);
     await setDoc(doc(db,'approvals',r.id),{...match,status:'pending'});
+    if(returnHome){show('home');return}
     const invite=encodeURIComponent(JSON.stringify({id:r.id,token:r.inviteToken,name:r.opponents?.[0]?.name||r.opponent,author:r.author,score:r.score}));
     const url=`${location.origin}${location.pathname}?approval=${encodeURIComponent(r.id)}&invite=${invite}`;
     const next=shareLink?`<p class="muted">Send this link to ${esc(r.opponent)}. Their name and score will be ready during registration.</p><button class="primary wide" onclick="navigator.share?navigator.share({title:'Approve Rallysh score',url:'${url}'}):navigator.clipboard.writeText('${url}')">Share link</button>`:`<p class="muted">${esc(r.opponent)} will see this approval request on their Rallysh home screen.</p>`;
     byId('result').innerHTML=`<div class="result"><div class="medal">&#128203;</div><h1>Approval request sent</h1>${next}<button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to home</button></div>`;
   }catch(error){console.error(error);alert('Could not save the match. Check Firebase rules and your internet connection.');if(submit){submit.disabled=false;submit.textContent=shareLink?'Create shareable link':'Send approval request'}}
 }
+window.saveApproval=saveApproval;
 window.createApprovalLink=async function(){await saveApproval('',true)};
 window.submitRegisteredApproval=async function(){const email=draft.approval?.opponentEmail;if(!email){alert('Choose a registered opponent first.');return}await saveApproval(email,false)};
 window.acceptPending=async function(id){
   const approval=state.pending.find(x=>x.id===id),isInvite=window.inviteContext?.id===id;if((!approval&&!isInvite)||(approval?.opponentEmail&&approval.opponentEmail!==current.email)){alert('This request must be accepted by the invited player.');return}
   try{await httpsCallable(functions,'approveMatch')({approvalId:id,inviteToken:isInvite?window.inviteContext.token:null});window.inviteContext=null;history.replaceState({},'',location.pathname);alert('Score approved and both players\' rankings have been updated.')}catch(error){console.error(error);const code=error.code||'unknown error';const message=code==='functions/failed-precondition'?'This match was created before all required player details were saved. Create a new match after both players have profiles.':`Could not approve this score: ${code}. Deploy the updated Rallysh Cloud Function, then try again.`;alert(message)}
 };
-window.likePost=async function(id){try{await updateDoc(doc(db,'posts',id),{likes:increment(1)})}catch(error){console.warn(error);alert('Could not save the like.')}};
-window.commentPost=function(){alert('Comments require the next backend update.');};
+window.likePost=async function(id){
+  if(!auth.currentUser){alert('Sign in to like a match.');return}
+  try{
+    await runTransaction(db,async transaction=>{
+      const postRef=doc(db,'posts',id),snapshot=await transaction.get(postRef);
+      if(!snapshot.exists())throw new Error('Match post no longer exists.');
+      const post=snapshot.data(),uid=auth.currentUser.uid,likedBy=Array.isArray(post.likedBy)?post.likedBy:[];
+      const next=likedBy.includes(uid)?likedBy.filter(userId=>userId!==uid):[...likedBy,uid];
+      transaction.update(postRef,{likedBy:next,likes:next.length});
+    });
+  }catch(error){console.warn(error);alert('Could not save the like. Please try again.');}
+};
+window.commentPost=async function(id){
+  if(!auth.currentUser||!current){alert('Sign in to comment on a match.');return}
+  const text=prompt('Add a comment');
+  if(!text?.trim())return;
+  try{
+    await runTransaction(db,async transaction=>{
+      const postRef=doc(db,'posts',id),snapshot=await transaction.get(postRef);
+      if(!snapshot.exists())throw new Error('Match post no longer exists.');
+      const oldItems=Array.isArray(snapshot.data().commentItems)?snapshot.data().commentItems:[];
+      const items=[...oldItems,{id:crypto.randomUUID(),author:current.name||'Player',text:text.trim().slice(0,280),createdAt:Date.now()}].slice(-20);
+      transaction.update(postRef,{commentItems:items,comments:items.length});
+    });
+  }catch(error){console.warn(error);alert('Could not save the comment. Please try again.');}
+};
+window.sharePost=async function(id){
+  const post=state.posts.find(item=>item.id===id);
+  if(!post)return;
+  const text=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}${post.venue?` at ${post.venue}`:''}`;
+  try{
+    if(post.photo){
+      const response=await fetch(post.photo),blob=await response.blob();
+      const file=new File([blob],`rallysh-match-${id}.jpg`,{type:blob.type||'image/jpeg'});
+      if(navigator.canShare?.({files:[file]})){await navigator.share({title:'Rallysh match',text,files:[file]});return}
+      if(navigator.share){await navigator.share({title:'Rallysh match',text,url:post.photo});return}
+    }
+    if(navigator.share)await navigator.share({title:'Rallysh match',text});
+    else {await navigator.clipboard.writeText(`${text}${post.photo?` ${post.photo}`:''}`);alert('Match details copied to your clipboard.');}
+  }catch(error){if(error?.name!=='AbortError'){console.warn(error);alert('Could not share this match. Please try again.')}}
+};
 const publicAppUrl=location.protocol==='file:'?'https://gauravsigmano1.github.io/Ace-Rank-Codex/':`${location.origin}${location.pathname}`;
 const emailActionSettings={url:publicAppUrl,handleCodeInApp:true};
 window.startEmailRegistration=async function(){
@@ -307,11 +356,16 @@ window.showPasswordReset=function(email){authView('resetPasswordForm');byId('res
   #match.quick-mode>.ghost,#match.quick-mode>.progress,#match.quick-mode>.step{display:none!important}
   .quick-log{display:grid;gap:14px;padding:4px 0 20px}.quick-log h1{margin:0;font-size:30px}.quick-card{padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:18px}.quick-label{display:block;margin:0 0 10px;color:var(--muted);font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.quick-pills{display:flex;flex-wrap:wrap;gap:8px}.quick-pills button{padding:10px 13px;border:1px solid #405182;border-radius:999px;background:#202a48;color:var(--muted);font-weight:800}.quick-pills button.active{background:var(--lime);border-color:var(--lime);color:#10172b}.quick-player{width:100%;padding:13px;background:#0d1428;border:1px solid var(--line);border-radius:12px;color:var(--ink);text-align:left;margin:7px 0}.quick-player small{display:block;color:var(--muted);margin-top:3px}.quick-add{display:flex;gap:8px;margin-top:9px}.quick-add button{flex:1;padding:10px;border:1px dashed #4d6094;border-radius:11px;background:transparent;color:var(--lime);font-weight:800}.quick-score{display:grid;grid-template-columns:64px 1fr 26px 1fr;gap:8px;align-items:center;margin:9px 0}.quick-score input{text-align:center;padding:11px 6px}.quick-score b{text-align:center;color:var(--muted)}.quick-score small{font-weight:800;color:var(--muted)}.quick-note{margin:9px 0 0;color:var(--muted);font-size:13px}.quick-share .composer{margin:0}.quick-share h1{margin-bottom:2px}
 </style>
+<style>
+  .post .actions button{font-size:14px!important}.post .actions button:after{content:none!important}
+  .comment-list{margin:12px 0;border-top:1px solid var(--line);padding-top:7px}.comment-list p{margin:7px 0;color:var(--muted);font-size:13px}.comment-list b{color:var(--ink)}
+</style>
 <script>
 /* Fast match logger: core choices and every possible set on one screen. */
 let quickHolder=null,legacyGo=go;
 function quickRoot(){if(!quickHolder){quickHolder=document.createElement('div');quickHolder.id='quickLogger';byId('match').append(quickHolder)}return quickHolder}
 function parkComposer(){const composer=document.querySelector('.composer'),legacyStep=byId('step4');if(composer&&legacyStep&&composer.parentElement!==legacyStep)legacyStep.insertBefore(composer,byId('postButton'))}
+function parkResult(){const result=byId('result'),legacyStep=byId('step5');if(result&&legacyStep&&result.parentElement!==legacyStep)legacyStep.append(result)}
 function quickRoles(){return draft.type==='doubles'?[['partner','Your partner'],['opponent1','Opponent 1'],['opponent2','Opponent 2']]:[['opponent','Opponent']]}
 function quickPlayer(role,label){const player=draft.players[role];return `<button class="quick-player" onclick="quickOpenPicker('${role}')"><b>${player?esc(player.name):`Choose ${label.toLowerCase()}`}</b><small>${player?`${Math.round(player.singles||1200)} RP · tap to change`:'Tap to choose an existing player'}</small></button>`}
 function renderQuickMatch(){parkComposer();const root=quickRoot();draft.type=draft.type||'singles';draft.format=draft.format||formats[1];draft.sets=draft.format[1]==='sets'?draft.format[2]:1;root.innerHTML=`<div class="quick-log"><div><span class="eyebrow">New match</span><h1>Log a score</h1></div><section class="quick-card"><span class="quick-label">Match type</span><div class="quick-pills"><button class="${draft.type==='singles'?'active':''}" onclick="quickType('singles')">Singles</button><button class="${draft.type==='doubles'?'active':''}" onclick="quickType('doubles')">Doubles</button></div></section><section class="quick-card"><span class="quick-label">Players</span>${quickRoles().map(([role,label])=>quickPlayer(role,label)).join('')}<div class="quick-add"><button onclick="quickAddPlayer()">+ Add a new player</button></div></section><section class="quick-card"><span class="quick-label">Format</span><div class="quick-pills">${formats.map((f,i)=>`<button class="${draft.format===f?'active':''}" onclick="quickFormat(${i})">${f[0]}</button>`).join('')}</div><p class="quick-note">${draft.format[1]==='sets'?`Best of ${draft.format[2]} — all ${draft.format[2]} set rows are ready below.`:'Enter the final score for this format.'}</p></section><section class="quick-card"><span class="quick-label">Set scores</span><p class="quick-note">${current?.name||'You'} vs ${quickRoles().filter(([role])=>role!=='partner').map(([role])=>draft.players[role]?.name||'opponent').join(' & ')}</p>${Array.from({length:draft.sets},(_,i)=>`<div class="quick-score"><small>Set ${i+1}</small><input id="a${i}" type="number" min="0" inputmode="numeric" placeholder="-" aria-label="Your score for set ${i+1}"><b>vs</b><input id="b${i}" type="number" min="0" inputmode="numeric" placeholder="-" aria-label="Opponent score for set ${i+1}"></div>`).join('')}<p class="quick-note">Leave unplayed sets blank.</p></section><button class="primary wide" onclick="quickContinue()">Continue to court details</button></div>`}
@@ -322,9 +376,9 @@ function quickAddPlayer(){pickerRole=quickRoles().find(([role])=>!draft.players[
 function quickCollectScores(){const [,kind,max]=draft.format,scores=[];for(let i=0;i<draft.sets;i++){const left=byId('a'+i).value.trim(),right=byId('b'+i).value.trim();if(!left&&!right)continue;const a=Number(left),b=Number(right);if(!left||!right||!validRow(a,b,kind,max)){alert(`Set ${i+1} is not a valid ${draft.format[0]} score.`);return null}scores.push([a,b])}const aWins=scores.filter(s=>s[0]>s[1]).length,bWins=scores.length-aWins,required=kind==='sets'?Math.ceil(max/2):1;if(!scores.length||aWins===bWins||Math.max(aWins,bWins)<required){alert('Enter enough completed sets to determine a winner.');return null}return scores}
 function renderQuickShare(){const root=quickRoot(),composer=document.querySelector('.composer');root.innerHTML=`<div class="quick-log quick-share"><button class="ghost" onclick="renderQuickMatch()">Back</button><div><span class="eyebrow">Match recorded</span><h1>Share the court</h1><p class="muted">Optional: add a photo or venue before sending the score.</p></div></div>`;if(composer)root.append(composer);const send=document.createElement('button');send.className='primary wide';send.style.marginTop='12px';send.textContent='Send for approval';send.onclick=saveMatch;root.append(send)}
 function quickContinue(){const required=draft.type==='doubles'?3:1;if(Object.keys(draft.players).length!==required){alert('Choose every player first.');return}const scores=quickCollectScores();if(!scores)return;draft.completedScores=scores;renderQuickShare()}
-newMatch=function(){draft={type:'singles',players:{},format:formats[1],sets:3,venue:'',completedScores:null};courtPhoto='';courtCanvas=null;saving=false;const file=byId('courtFile'),venue=byId('venueInput'),preview=byId('courtPreview');if(file)file.value='';if(venue)venue.value='';if(preview){preview.removeAttribute('src');preview.style.display='none'}byId('match').classList.add('quick-mode');show('match');renderQuickMatch()};
+newMatch=function(){draft={type:'singles',players:{},format:formats[1],sets:3,venue:'',completedScores:null};courtPhoto='';courtCanvas=null;saving=false;const file=byId('courtFile'),venue=byId('venueInput'),preview=byId('courtPreview');if(file)file.value='';if(venue)venue.value='';if(preview){preview.removeAttribute('src');preview.style.display='none'}byId('match').classList.add('quick-mode');show('match');parkResult();renderQuickMatch()};
 pickPlayer=function(id){draft.players[pickerRole]=state.users.find(u=>u.id===id);closePicker();renderQuickMatch()};
 addPlayerFromPicker=function(){const name=prompt('New player name');if(!name?.trim())return;draft.players[pickerRole]={id:crypto.randomUUID(),email:'',name:name.trim(),singles:1200,sm:0};closePicker();renderQuickMatch()};
-go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('result');root.innerHTML='';root.append(result);return}legacyGo(n)};
+go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('result');root.innerHTML='';if(result)root.append(result);return}legacyGo(n)};
 </script>
 </body></html>
