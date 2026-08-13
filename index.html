@@ -409,7 +409,16 @@ window.shareScoreOnly=async function(id){
 };
 window.downloadPostImage=async function(id){
   const post=state.posts.find(item=>item.id===id);if(!post?.photo)return;
-  try{const response=await fetch(post.photo,{mode:'cors',cache:'no-store'});if(!response.ok)throw new Error(`Image download failed (${response.status})`);const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`rallysh-${post.won?'win':'loss'}-${id}.jpg`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);window.closeShareChoice()}catch(error){console.warn(error);alert('Could not download this image. Please try again.')}
+  try{
+    const response=await fetch(post.photo,{mode:'cors',cache:'no-store'});
+    if(!response.ok)throw new Error(`Image download failed (${response.status})`);
+    const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=`rallysh-${post.won?'win':'loss'}-${id}.jpg`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);window.closeShareChoice();
+  }catch(error){
+    console.warn('Browser download was unavailable; opening the image directly.',error);
+    window.open(post.photo,'_blank','noopener');
+    alert('The image opened in a new tab. Use your browser menu to save or download it.');
+  }
 };
 const publicAppUrl=location.protocol==='file:'?'https://gauravsigmano1.github.io/Ace-Rank-Codex/':`${location.origin}${location.pathname}`;
 const emailActionSettings={url:publicAppUrl,handleCodeInApp:true};

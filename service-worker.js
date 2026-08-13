@@ -1,4 +1,4 @@
-const CACHE = 'rallysh-v18';
+const CACHE = 'rallysh-v19';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './ace-rank-icon.svg', './rallysh-opening-preview.jpg'];
 
 self.addEventListener('install', event => {
@@ -12,5 +12,8 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  // Firebase Storage files are cross-origin. Let the browser handle them
+  // directly instead of routing them through this app-shell cache.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });
