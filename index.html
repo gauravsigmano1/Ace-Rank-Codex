@@ -53,7 +53,17 @@ function showVenuePicker(){byId('venueArea').classList.remove('hidden');byId('ve
 function courtPhotoSelected(input){let file=input.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{let im=new Image();im.onload=()=>{let s=Math.min(im.width,im.height),x=(im.width-s)/2,y=(im.height-s)/2,c=document.createElement('canvas');c.width=c.height=720;let ctx=c.getContext('2d');ctx.drawImage(im,x,y,s,s,0,0,720,720);courtPhoto=c.toDataURL('image/jpeg',.7);courtCanvas=c;let preview=byId('courtPreview');preview.src=courtPhoto;preview.style.display='block'};im.src=r.result};r.readAsDataURL(file)}
 function validRow(a,b,kind,max){if(a===b||a<0||b<0)return false;let hi=Math.max(a,b),lo=Math.min(a,b);if(kind==='sets'||kind==='set')return(hi===6&&lo<=4)||(hi===7&&(lo===5||lo===6));if(kind==='race')return hi===max&&lo<max;if(kind==='breaker')return hi>=max&&hi-lo>=2;return false}
 function k(m){return m<10?40:m<30?24:16}function saveMatch(){if(saving)return;let [,kind,max,weight]=draft.format,scores=[];for(let i=0;i<draft.sets;i++){let a=+byId('a'+i).value,b=+byId('b'+i).value;if(!Number.isFinite(a)||!Number.isFinite(b)||!validRow(a,b,kind,max)){alert(`That score is not valid for ${draft.format[0]}.`);return}scores.push([a,b])}let aw=scores.filter(s=>s[0]>s[1]).length,bw=scores.length-aw;if(aw===bw){alert('A match needs a winner. Add a deciding set.');return}saving=true;byId('postButton').disabled=true;byId('postButton').textContent='Creating approval requestÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦';let won=aw>bw,teamA=[current],teamB=[];if(draft.type==='singles')teamB=[draft.players.opponent];else{teamA.push(draft.players.partner);teamB=[draft.players.opponent1,draft.players.opponent2]}let key=draft.type==='singles'?'singles':'doubles',mk=draft.type==='singles'?'sm':'dm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=raw/teamA.length;let before=[...teamA,...teamB].map(p=>({id:p.id,r:p[key],m:p[mk]}));teamA.forEach(p=>{p[key]+=delta;p[mk]++});teamB.forEach(p=>{p[key]-=raw/teamB.length;p[mk]++});let venue=byId('venueInput').value.trim();if(venue&&!state.venues.includes(venue))state.venues.unshift(venue);let post={id:crypto.randomUUID(),author:current.name,won,score:scores.map(s=>s.join('ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“')).join(', '),delta:Math.round(delta),venue,photo:'',likes:0,comments:0,liked:false};if(courtPhoto)post.photo=watermark(courtPhoto,won,post.score);state.posts.push(post);let request={id:crypto.randomUUID(),opponent:teamB.map(p=>p.name).join(' & '),score:post.score,author:current.name,created:Date.now()};state.pending.push(request);save();let link=`${location.origin}${location.pathname}?approval=${btoa(JSON.stringify(request))}`;byId('result').innerHTML=`<div class="medal">${won?'ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â ':'ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¾'}</div><h1>${won?'Victory recorded':'Match recorded'}</h1><p class="muted">Rating change: ${Math.round(delta)>=0?'+':''}${Math.round(delta)} ${key} points.</p><div class="approval"><b>Approval required from ${esc(request.opponent)}</b><br>Share this request so the opponent can create a profile and accept the score.</div><button class="primary wide" onclick="shareApproval('${btoa(link)}')">Share approval link</button><button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to feed</button>`;go(5);saving=false;byId('postButton').disabled=false;byId('postButton').textContent='Send for approval'}
-function watermark(src,won,score){if(!courtCanvas)return src;let c=document.createElement('canvas');c.width=c.height=720;let ctx=c.getContext('2d');ctx.drawImage(courtCanvas,0,0,720,720);ctx.fillStyle='#000a';ctx.fillRect(0,600,720,120);ctx.fillStyle='#fff';ctx.font='bold 30px system-ui';ctx.fillText(`${won?'WON':'LOSS'} BY ${score}`,28,676);return c.toDataURL('image/jpeg',.72)}
+function watermark(src,won,score){
+  if(!courtCanvas)return src;
+  const c=document.createElement('canvas');c.width=c.height=720;const ctx=c.getContext('2d');ctx.drawImage(courtCanvas,0,0,720,720);
+  // Center result mark: a clear green victory tick or pink loss mark.
+  ctx.save();ctx.translate(360,325);ctx.fillStyle=won?'#b9ff55dd':'#ff6c8fdd';ctx.beginPath();ctx.arc(0,0,68,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=15;ctx.lineCap='round';ctx.beginPath();
+  if(won){ctx.moveTo(-30,2);ctx.lineTo(-5,28);ctx.lineTo(37,-30)}else{ctx.moveTo(-26,-26);ctx.lineTo(26,26);ctx.moveTo(26,-26);ctx.lineTo(-26,26)}ctx.stroke();ctx.restore();
+  ctx.fillStyle='#000b';ctx.fillRect(0,600,720,120);ctx.fillStyle='#fff';ctx.font='900 30px system-ui';ctx.fillText(`${won?'WON':'LOSS'} BY ${score}`,28,674);
+  // Rallysh lockup at the lower right.
+  ctx.save();ctx.translate(562,638);ctx.fillStyle='#a7ff5a';ctx.beginPath();ctx.arc(18,18,18,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(18,18,14,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='900 27px system-ui';ctx.fillText('Rally',45,27);ctx.fillStyle='#a7ff5a';ctx.fillText('sh',116,27);ctx.restore();
+  return c.toDataURL('image/jpeg',.82)
+}
 function likePost(id){let p=state.posts.find(x=>x.id===id);p.liked=!p.liked;p.likes=Math.max(0,p.likes+(p.liked?1:-1));save();renderFeed()}function commentPost(id){let p=state.posts.find(x=>x.id===id);p.comments++;save();renderFeed()}function sharePost(id){let p=state.posts.find(x=>x.id===id);navigator.share?navigator.share({title:'Ace Rank match',text:`${p.author} ${p.won?'won':'lost'} ${p.score}${p.venue?` at ${p.venue}`:''}`}):navigator.clipboard.writeText(location.href)}function shareApproval(encoded){let url=atob(encoded);navigator.share?navigator.share({title:'Approve Ace Rank match',text:'Please create your profile and approve this match score.',url}):navigator.clipboard.writeText(url);alert('Approval link ready to share.')}function acceptRequest(id){let request=state.pending.find(p=>p.id===id);if(!request)return;request.accepted=true;save();renderAll();alert('Score accepted. In a production launch this confirmation would update the shared backend for both players.')}if('serviceWorker'in navigator)navigator.serviceWorker.register('service-worker.js');init();
 </script>
 <style>
@@ -384,25 +394,22 @@ window.commentPost=async function(id){
     });
   }catch(error){console.warn(error);alert('Could not save the comment. Please try again.');}
 };
-window.sharePost=async function(id){
-  const post=state.posts.find(item=>item.id===id);
-  if(!post)return;
-  const text=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}${post.venue?` at ${post.venue}`:''}`;
-  const fallback=async()=>{
-    if(navigator.share){await navigator.share({title:'Rallysh match',text,url:post.photo||undefined});return}
-    await navigator.clipboard.writeText(`${text}${post.photo?` ${post.photo}`:''}`);alert('Match details and photo link copied to your clipboard.');
-  };
-  try{
-    if(post.photo){
-      try{
-        const response=await fetch(post.photo);
-        if(!response.ok)throw new Error(`Photo download failed (${response.status})`);
-        const blob=await response.blob(),file=new File([blob],`rallysh-match-${id}.jpg`,{type:blob.type||'image/jpeg'});
-        if(navigator.canShare?.({files:[file]})){await navigator.share({title:'Rallysh match',text,files:[file]});return}
-      }catch(imageError){console.warn('Sharing photo file was unavailable; sharing its link instead.',imageError)}
-    }
-    await fallback();
-  }catch(error){if(error?.name!=='AbortError'){console.warn(error);alert('Could not open the share menu. Please try again.')}}
+window.sharePost=function(id){
+  const post=state.posts.find(item=>item.id===id);if(!post)return;
+  byId('shareChoiceText').textContent=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}.`;
+  byId('shareScoreButton').onclick=()=>shareScoreOnly(id);
+  const download=byId('downloadImageButton');download.disabled=!post.photo;download.textContent=post.photo?'Download image':'No image on this match';download.onclick=()=>downloadPostImage(id);
+  byId('shareChoice').classList.remove('hidden');
+};
+window.closeShareChoice=function(){byId('shareChoice').classList.add('hidden')}
+window.shareScoreOnly=async function(id){
+  const post=state.posts.find(item=>item.id===id);if(!post)return;
+  const appUrl=`${location.origin}${location.pathname}`,text=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}${post.venue?` at ${post.venue}`:''}.\n\nTrack your tennis matches on Rallysh: ${appUrl}`;
+  try{if(navigator.share)await navigator.share({title:'Rallysh match',text});else{await navigator.clipboard.writeText(text);alert('Score and Rallysh link copied to your clipboard.')}window.closeShareChoice()}catch(error){if(error?.name!=='AbortError')alert('Could not open the share menu. Please try again.')}
+};
+window.downloadPostImage=async function(id){
+  const post=state.posts.find(item=>item.id===id);if(!post?.photo)return;
+  try{const response=await fetch(post.photo,{mode:'cors',cache:'no-store'});if(!response.ok)throw new Error(`Image download failed (${response.status})`);const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`rallysh-${post.won?'win':'loss'}-${id}.jpg`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);window.closeShareChoice()}catch(error){console.warn(error);alert('Could not download this image. Please try again.')}
 };
 const publicAppUrl=location.protocol==='file:'?'https://gauravsigmano1.github.io/Ace-Rank-Codex/':`${location.origin}${location.pathname}`;
 const emailActionSettings={url:publicAppUrl,handleCodeInApp:true};
@@ -473,5 +480,6 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
 </script>
 <div id="accountProfile" class="modal account-modal hidden" role="dialog" aria-modal="true" aria-labelledby="accountProfileTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closeProfile()" aria-label="Close profile">×</button><div id="accountAvatar" class="user-avatar account-avatar">P</div><div class="account-meta"><h1 id="accountProfileTitle">Your profile</h1><p>Rallysh player details</p></div><label>Name<input id="accountName" class="readonly-field" readonly></label><label>Email<input id="accountEmail" class="readonly-field" type="email" readonly></label><label>Date of birth<input id="accountDob" class="readonly-field" readonly></label><label>Gender<input id="accountGender" class="readonly-field" readonly></label><label>Phone number<input id="accountPhone" type="tel" autocomplete="tel" placeholder="Add your phone number"></label><label>City <span class="city-required">Required</span><input id="accountCity" type="text" autocomplete="address-level2" placeholder="Start typing your city" oninput="renderCitySuggestions('accountCity','accountCitySuggestions')"></label><div id="accountCitySuggestions" class="city-suggestions hidden"></div><button id="saveContactButton" class="primary wide" onclick="saveProfileContact()">Save contact details</button></div></div>
 <div id="pendingScores" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pendingScoresTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closePendingScores()" aria-label="Close pending scores">×</button><h1 id="pendingScoresTitle">Pending scores</h1><p class="muted">Share a reminder if an opponent has not approved a match yet.</p><div id="pendingScoresList"></div></div></div>
+<div id="shareChoice" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shareChoiceTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closeShareChoice()" aria-label="Close share options">×</button><h1 id="shareChoiceTitle">Share match</h1><p id="shareChoiceText" class="muted"></p><button id="shareScoreButton" class="primary wide">Share score</button><button id="downloadImageButton" class="secondary wide" style="margin-top:10px">Download image</button></div></div>
 <div id="requiredCityModal" class="modal city-modal hidden" role="dialog" aria-modal="true" aria-labelledby="requiredCityTitle"><div class="modal-card"><h1 id="requiredCityTitle">Add your city</h1><p class="muted">Your city is required to complete your Rallysh profile.</p><label>City <span class="city-required">Required</span><input id="requiredCityInput" type="text" autocomplete="address-level2" placeholder="Start typing your city" oninput="renderCitySuggestions('requiredCityInput','requiredCitySuggestions')"></label><div id="requiredCitySuggestions" class="city-suggestions hidden"></div><button class="primary wide" onclick="saveRequiredCity()">Save city</button></div></div>
 </body></html>
