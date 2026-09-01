@@ -491,4 +491,9 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
 <div id="pendingScores" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pendingScoresTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closePendingScores()" aria-label="Close pending scores">×</button><h1 id="pendingScoresTitle">Pending scores</h1><p class="muted">Share a reminder if an opponent has not approved a match yet.</p><div id="pendingScoresList"></div></div></div>
 <div id="shareChoice" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shareChoiceTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closeShareChoice()" aria-label="Close share options">×</button><h1 id="shareChoiceTitle">Share match</h1><p id="shareChoiceText" class="muted"></p><button id="shareScoreButton" class="primary wide">Share score</button><button id="downloadImageButton" class="secondary wide" style="margin-top:10px">Download image</button></div></div>
 <div id="requiredCityModal" class="modal city-modal hidden" role="dialog" aria-modal="true" aria-labelledby="requiredCityTitle"><div class="modal-card"><h1 id="requiredCityTitle">Add your city</h1><p class="muted">Your city is required to complete your Rallysh profile.</p><label>City <span class="city-required">Required</span><input id="requiredCityInput" type="text" autocomplete="address-level2" placeholder="Start typing your city" oninput="renderCitySuggestions('requiredCityInput','requiredCitySuggestions')"></label><div id="requiredCitySuggestions" class="city-suggestions hidden"></div><button class="primary wide" onclick="saveRequiredCity()">Save city</button></div></div>
+<script>
+  /* Exposes read-only session data to the safety module. */
+  window.rallyshSession=()=>({current,state});
+</script>
+<script type="module" src="safety.js"></script>
 </body></html>
