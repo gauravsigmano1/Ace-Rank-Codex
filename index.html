@@ -149,14 +149,14 @@ if(current)cleanRenderAll();
 /* Rallysh cloud data layer — Firebase configuration is public client configuration,
    not a service-account credential. Server-side secrets are never stored here. */
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
-import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,signInWithPopup,signOut,sendEmailVerification,sendPasswordResetEmail,verifyPasswordResetCode,confirmPasswordReset,applyActionCode} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,GoogleAuthProvider,OAuthProvider,signInWithPopup,signInWithRedirect,signOut,sendEmailVerification,sendPasswordResetEmail,verifyPasswordResetCode,confirmPasswordReset,applyActionCode} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,query,orderBy,limit,where,updateDoc,increment,runTransaction} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {getStorage,ref,uploadString,getDownloadURL} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
-let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false,googleProfileStep=0;
+let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false,googleProfileStep=0,socialProvider='';
 const splashStartedAt=Date.now();let splashDismissed=false;function dismissSplash(){if(splashDismissed)return;splashDismissed=true;setTimeout(()=>document.documentElement.classList.remove('session-checking'),Math.max(0,450-(Date.now()-splashStartedAt)))}
 window.inviteContext=(()=>{try{const raw=new URLSearchParams(location.search).get('invite');return raw?JSON.parse(raw):null}catch{return null}})();
 const asPlayer=(id,data)=>({id,...data});
@@ -182,12 +182,13 @@ function cityNames(){return [...new Set(state.users.map(user=>(user.city||'').tr
 window.renderCitySuggestions=function(inputId,listId){const input=byId(inputId),list=byId(listId);if(!input||!list)return;const query=input.value.trim().toLowerCase();const choices=cityNames().filter(city=>!query||city.toLowerCase().includes(query)).slice(0,7);list.innerHTML=choices.map(city=>`<button type="button" onclick="chooseCity('${inputId}','${listId}',this.textContent)">${esc(city)}</button>`).join('');list.classList.toggle('hidden',!choices.length)}
 window.chooseCity=function(inputId,listId,city){byId(inputId).value=city;byId(listId).classList.add('hidden')}
 function showProfileForm(user=auth.currentUser){
-  const isGoogle=!!user?.providerData?.some(p=>p.providerId==='google.com');
-  googleProfileSignup=isGoogle;googleProfileStep=isGoogle?1:0;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('registerForm')?.classList.add('hidden');byId('verifyEmailForm')?.classList.add('hidden');byId('resetPasswordForm')?.classList.add('hidden');byId('profileForm').classList.remove('hidden');
-  byId('googleProfileNote').classList.toggle('hidden',!isGoogle);byId('profileDobLabel').classList.toggle('hidden',isGoogle);byId('profileGenderLabel').classList.toggle('hidden',isGoogle);
-  byId('createProfileButton').textContent=isGoogle?'Continue':'Create profile';
+  const providerId=user?.providerData?.find(p=>p.providerId==='google.com'||p.providerId==='apple.com')?.providerId||'';
+  const isSocial=!!providerId;
+  socialProvider=providerId==='apple.com'?'apple':providerId==='google.com'?'google':'';googleProfileSignup=isSocial;googleProfileStep=isSocial?1:0;byId('auth').classList.remove('hidden');byId('loginForm').classList.add('hidden');byId('registerForm')?.classList.add('hidden');byId('verifyEmailForm')?.classList.add('hidden');byId('resetPasswordForm')?.classList.add('hidden');byId('profileForm').classList.remove('hidden');
+  byId('googleProfileNote').classList.toggle('hidden',!isSocial);byId('googleProfileNote').textContent='Your sign-in details were added. Continue to complete your Rallysh profile.';byId('profileDobLabel').classList.toggle('hidden',isSocial);byId('profileGenderLabel').classList.toggle('hidden',isSocial);
+  byId('createProfileButton').textContent=isSocial?'Continue':'Create profile';
   const invitedName=window.inviteContext?.name||'';
-  if(isGoogle){byId('loginEmail').value=user.email||'';byId('profileName').value=invitedName||user.displayName||'';byId('profilePreview').src=user.photoURL||'';profilePhoto='';}
+  if(isSocial){byId('loginEmail').value=user.email||'';byId('profileName').value=invitedName||user.displayName||'';byId('profilePreview').src=user.photoURL||'';profilePhoto='';}
   else if(invitedName)byId('profileName').value=invitedName;
   window.renderCitySuggestions('profileCity','profileCitySuggestions');
 }
@@ -205,8 +206,8 @@ onAuthStateChanged(auth,async user=>{
   let profileData=profile.data();
   // Repair profiles created by earlier Google sign-ins, which did not copy the
   // Firebase account email into Firestore.
-  if(user.providerData?.some(p=>p.providerId==='google.com')&&!profileData.email&&user.email){
-    const repair={email:user.email,provider:'google'};
+  if(user.providerData?.some(p=>p.providerId==='google.com'||p.providerId==='apple.com')&&!profileData.email&&user.email){
+    const repair={email:user.email,provider:user.providerData?.some(p=>p.providerId==='apple.com')?'apple':'google'};
     if(!profileData.name&&user.displayName)repair.name=user.displayName;
     if(!profileData.photo&&user.photoURL)repair.photo=user.photoURL;
     await setDoc(doc(db,'users',user.uid),repair,{merge:true});profileData={...profileData,...repair};
@@ -243,6 +244,20 @@ window.loginWithGoogle=async function(){
     else alert(`Google sign-in could not be completed: ${reason}.`);
   }
 }
+window.loginWithApple=async function(){
+  if(location.protocol==='file:'){alert('Sign in with Apple cannot run from a local index.html file. Open Rallysh from its deployed HTTPS address.');return}
+  try{
+    const provider=new OAuthProvider('apple.com');provider.addScope('email');provider.addScope('name');
+    // Redirect avoids mobile browsers blocking the Apple OAuth pop-up.
+    if(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) await signInWithRedirect(auth,provider);
+    else await signInWithPopup(auth,provider);
+  }catch(error){
+    console.error(error);const reason=error?.code||'unknown error';
+    if(reason==='auth/operation-not-allowed')alert('Sign in with Apple is not enabled in Firebase Authentication yet. Complete the Apple/Firebase setup, then try again.');
+    else if(reason==='auth/popup-closed-by-user')alert('Sign in with Apple was cancelled before it completed.');
+    else alert(`Sign in with Apple could not be completed: ${reason}.`);
+  }
+}
 window.createProfile=async function(){
   const name=byId('profileName').value.trim(),signedInEmail=(auth.currentUser?.email||'').trim().toLowerCase(),typedEmail=byId('loginEmail').value.trim().toLowerCase(),email=signedInEmail||typedEmail,dob=byId('profileDob').value,gender=byId('profileGender').value,city=byId('profileCity').value.trim();
   if(googleProfileSignup&&googleProfileStep===1){
@@ -255,8 +270,8 @@ window.createProfile=async function(){
     if(!user){if(!pendingPassword){alert('Enter a password first.');return}user=(await createUserWithEmailAndPassword(auth,email,pendingPassword)).user}
     let photo=user?.photoURL||'';
     if(profilePhoto){const imageRef=ref(storage,`profile-photos/${user.uid}/profile.jpg`);await uploadString(imageRef,profilePhoto,'data_url');photo=await getDownloadURL(imageRef)}
-    const profile={email,name,dob,gender,city,photo,singles:1200,doubles:1200,sm:0,dm:0,provider:googleProfileSignup?'google':'password',createdAt:Date.now()};
-    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};googleProfileSignup=false;googleProfileStep=0;byId('auth').classList.add('hidden');watchCloudData();renderAll();
+    const profile={email,name,dob,gender,city,photo,singles:1200,doubles:1200,sm:0,dm:0,provider:socialProvider||'password',createdAt:Date.now()};
+    await setDoc(doc(db,'users',user.uid),profile);current={id:user.uid,...profile};googleProfileSignup=false;googleProfileStep=0;socialProvider='';byId('auth').classList.add('hidden');watchCloudData();renderAll();
   }catch(error){
     console.error(error);
     const reason=error?.code||'unknown error';
@@ -350,10 +365,18 @@ async function saveApproval(email,shareLink,returnHome=false){
   if(Array.isArray(r.opponents))r.opponents=r.opponents.map((player,index)=>index===0&&!player.email?{...player,email}:player);
   const submit=byId('result').querySelector('.primary');if(submit){submit.disabled=true;submit.textContent='Saving match...'}
   try{
-    if(r.photo){const imageRef=ref(storage,`court-photos/${auth.currentUser.uid}/${r.id}.jpg`);await uploadString(imageRef,r.photo,'data_url');r.photo=await getDownloadURL(imageRef)}
-    const match={...r,createdAt:Date.now(),likes:0,comments:0,liked:false};
+    if(r.photo){const photoPath=`court-photos/${auth.currentUser.uid}/${r.id}.jpg`,imageRef=ref(storage,photoPath);await uploadString(imageRef,r.photo,'data_url');r.photo=await getDownloadURL(imageRef);r.photoPath=photoPath;r.contentStatus='reviewing'}
+    const match={...r,createdAt:Date.now(),likes:0,comments:0,liked:false,contentStatus:r.contentStatus||'approved'};
     await setDoc(doc(db,'posts',r.id),match);
     await setDoc(doc(db,'approvals',r.id),{...match,status:'pending'});
+    if(r.photoPath){
+      try{
+        const screening=(await httpsCallable(functions,'screenCourtPhoto')({postId:r.id})).data;
+        if(screening.status==='rejected')alert('Your court photo was not posted because it does not meet the Rallysh Community Guidelines. The score request was still sent.');
+      }catch(screeningError){
+        console.warn('Court photo screening is pending',screeningError);
+      }
+    }
     if(returnHome){show('home');return}
     const invite=encodeURIComponent(JSON.stringify({id:r.id,token:r.inviteToken,name:r.opponents?.[0]?.name||r.opponent,author:r.author,score:r.score}));
     const url=`${location.origin}${location.pathname}?approval=${encodeURIComponent(r.id)}&invite=${invite}`;
@@ -480,7 +503,7 @@ function quickFormat(index){draft.format=formats[index];draft.sets=draft.format[
 function quickOpenPicker(role){pickerRole=role;openPicker(role)}
 function quickAddPlayer(){pickerRole=quickRoles().find(([role])=>!draft.players[role])?.[0]||quickRoles()[0][0];addPlayerFromPicker()}
 function quickCollectScores(){const [,kind,max]=draft.format,scores=[];for(let i=0;i<draft.sets;i++){const left=byId('a'+i).value.trim(),right=byId('b'+i).value.trim();if(!left&&!right)continue;const a=Number(left),b=Number(right);if(!left||!right||!validRow(a,b,kind,max)){alert(`Set ${i+1} is not a valid ${draft.format[0]} score.`);return null}scores.push([a,b])}const aWins=scores.filter(s=>s[0]>s[1]).length,bWins=scores.length-aWins,required=kind==='sets'?Math.ceil(max/2):1;if(!scores.length||aWins===bWins||Math.max(aWins,bWins)<required){alert('Enter enough completed sets to determine a winner.');return null}return scores}
-function renderQuickShare(){const root=quickRoot(),composer=document.querySelector('.composer');root.innerHTML=`<div class="quick-log quick-share"><button class="ghost" onclick="renderQuickMatch()">Back</button><div><span class="eyebrow">Match recorded</span><h1>Share the court</h1><p class="muted">Optional: add a photo or venue before sending the score.</p></div></div>`;if(composer)root.append(composer);const send=document.createElement('button');send.className='primary wide';send.style.marginTop='12px';send.textContent='Send for approval';send.onclick=saveMatch;root.append(send)}
+function renderQuickShare(){const root=quickRoot(),composer=document.querySelector('.composer');root.innerHTML=`<div class="quick-log quick-share"><button class="ghost" onclick="renderQuickMatch()">Back</button><div><span class="eyebrow">Match recorded</span><h1>Share the court</h1><p class="muted">Optional: add a photo or venue before sending the score.</p><p class="muted" style="font-size:12px">Court photos are checked against the Rallysh Community Guidelines before they appear in the feed.</p></div></div>`;if(composer)root.append(composer);const send=document.createElement('button');send.className='primary wide';send.style.marginTop='12px';send.textContent='Send for approval';send.onclick=saveMatch;root.append(send)}
 function quickContinue(){const required=draft.type==='doubles'?3:1;if(Object.keys(draft.players).length!==required){alert('Choose every player first.');return}const scores=quickCollectScores();if(!scores)return;draft.completedScores=scores;renderQuickShare()}
 newMatch=function(){draft={type:'singles',players:{},format:formats[1],sets:3,venue:'',completedScores:null};courtPhoto='';courtCanvas=null;saving=false;const file=byId('courtFile'),venue=byId('venueInput'),preview=byId('courtPreview');if(file)file.value='';if(venue)venue.value='';if(preview){preview.removeAttribute('src');preview.style.display='none'}byId('match').classList.add('quick-mode');show('match');parkResult();renderQuickMatch()};
 pickPlayer=function(id){draft.players[pickerRole]=state.users.find(u=>u.id===id);closePicker();renderQuickMatch()};

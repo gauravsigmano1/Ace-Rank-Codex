@@ -37,6 +37,21 @@ function injectAuthLinks() {
   const links = document.createElement('p'); links.id = 'authLegalLinks'; links.className = 'muted'; links.style.cssText = 'font-size:11px;text-align:center;margin:16px 0 0'; links.innerHTML = `<a href="https://www.termsfeed.com/live/c1f82e48-8c30-4bf5-a8d4-6d413269b8a4" target="_blank" rel="noopener">Privacy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a> · <a href="community-guidelines.html" target="_blank" rel="noopener">Guidelines</a> · <a href="support.html" target="_blank" rel="noopener">Support</a>`; card.append(links);
 }
 
+function injectAppleButtons() {
+  const addButton = (googleButton, id, label) => {
+    if (!googleButton || document.getElementById(id)) return;
+    const button = document.createElement('button');
+    button.id = id;
+    button.className = 'secondary wide';
+    button.style.cssText = 'margin-top:10px;background:#000;color:#fff';
+    button.setAttribute('onclick', 'loginWithApple()');
+    button.innerHTML = `&#63743;&nbsp;&nbsp; ${label}`;
+    googleButton.insertAdjacentElement('afterend', button);
+  };
+  addButton(document.querySelector('#loginForm button[onclick="loginWithGoogle()"]'), 'appleLoginButton', 'Continue with Apple');
+  addButton(document.querySelector('#registerForm button[onclick="loginWithGoogle()"]'), 'appleRegisterButton', 'Register with Apple');
+}
+
 function ensureModals() {
   if (document.getElementById('safetyModals')) return;
   const holder = document.createElement('div'); holder.id = 'safetyModals';
@@ -52,7 +67,7 @@ function renderSafetyFeed() {
   const {current, state} = session(); if (!current || !document.getElementById('feed')) return;
   const blocked = new Set(safety.blockedUserIds), myMatches = state.posts.filter(post => idsFor(post).includes(current.id));
   const connectedSince = new Map(); myMatches.forEach(post => idsFor(post).filter(id => id !== current.id).forEach(id => { const previous = connectedSince.get(id), time = postTime(post); if (previous === undefined || time < previous) connectedSince.set(id, time); }));
-  const posts = state.posts.filter(post => { const ids = idsFor(post); if (post.pending || ids.some(id => blocked.has(id))) return false; if (ids.includes(current.id)) return true; return ids.some(id => connectedSince.has(id) && postTime(post) >= connectedSince.get(id)); }).slice(0, 5);
+  const posts = state.posts.filter(post => { const ids = idsFor(post); if (post.pending || post.contentStatus === 'reviewing' || post.contentStatus === 'rejected' || ids.some(id => blocked.has(id))) return false; if (ids.includes(current.id)) return true; return ids.some(id => connectedSince.has(id) && postTime(post) >= connectedSince.get(id)); }).slice(0, 5);
   const names = (ids, fallback) => (ids || []).map(id => state.users.find(user => user.id === id)?.name).filter(Boolean).join(' & ') || fallback || 'Opponent';
   const markup = post => {
     const comments = (Array.isArray(post.commentItems) ? post.commentItems : []).filter(comment => !blocked.has(comment.authorUid));
@@ -82,8 +97,8 @@ window.deleteMyAccount = async () => { if (document.getElementById('deleteConfir
 window.openModeration = async () => { if (!safety.isAdmin) return; document.getElementById('adminReportList').innerHTML = '<p class="muted">Loading reports…</p>'; document.getElementById('moderationModal').classList.remove('hidden'); try { const reports = (await call('getAdminReports')()).data.reports || [], {state} = session(); document.getElementById('adminReportList').innerHTML = reports.length ? reports.map(report => { const post = state.posts.find(item => item.id === report.postId); return `<div class="admin-report"><b>${escapeHtml(report.reason)}</b><small>${escapeHtml(report.targetType)} · ${escapeHtml(post?.author || report.targetAuthorUid || 'Unknown player')}</small><small>Status: ${escapeHtml(report.status || 'open')}</small><div class="admin-actions"><button class="secondary" onclick="moderateReport('${report.id}','dismiss')">Dismiss</button><button class="secondary" onclick="moderateReport('${report.id}','${report.targetType === 'comment' ? 'removeComment' : 'removePost'}')">Remove content</button>${report.targetAuthorUid ? `<button class="danger" onclick="moderateReport('${report.id}','suspendUser')">Suspend user</button>` : ''}</div></div>`; }).join('') : '<p class="muted">No reports to review.</p>'; } catch (error) { console.error(error); document.getElementById('adminReportList').innerHTML = '<p class="loss">Could not load reports.</p>'; } };
 window.moderateReport = async (reportId, action) => { if (!confirm(`Confirm moderation action: ${action}?`)) return; try { await call('moderateReport')({reportId, action}); await window.openModeration(); } catch (error) { console.error(error); alert('Could not apply this moderation action.'); } };
 
-addSafetyStyles(); ensureModals(); injectAuthLinks();
+addSafetyStyles(); ensureModals(); injectAuthLinks(); injectAppleButtons();
 const baseOpenProfile = window.openProfile; window.openProfile = async () => { await baseOpenProfile?.(); injectProfileSettings(); await refreshSafety(); };
 const baseOpenPicker = window.openPicker; window.openPicker = (...args) => { baseOpenPicker?.(...args); filterPicker(); };
 const baseRenderAll = window.renderAll; window.renderAll = (...args) => { const result = baseRenderAll?.(...args); injectProfileSettings(); renderSafetyFeed(); refreshSafety(); return result; };
-setTimeout(() => { injectAuthLinks(); refreshSafety(); }, 700);
+setTimeout(() => { injectAuthLinks(); injectAppleButtons(); refreshSafety(); }, 700);
