@@ -359,7 +359,16 @@ window.saveRequiredCity=async function(){
   if(!city){alert('City is required to continue.');return}
   try{await setDoc(doc(db,'users',current.id),{city},{merge:true});current={...current,city};byId('requiredCityModal').classList.add('hidden');renderAll()}catch(error){console.error(error);alert('Could not save your city. Please try again.')}
 }
-window.cloudLogout=()=>signOut(auth);
+window.cloudLogout=async function(){
+  try{
+    await signOut(auth);
+    window.closeProfile?.();
+    window.showLogin?.();
+  }catch(error){
+    console.error('Could not sign out',error);
+    alert('Could not sign out. Please try again.');
+  }
+};
 
 async function saveApproval(email,shareLink,returnHome=false){
   if(email&&!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
@@ -509,5 +518,5 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
   /* Exposes read-only session data to the safety module. */
   window.rallyshSession=()=>({current,state});
 </script>
-<script type="module" src="safety.js"></script>
+<script type="module" src="safety.js?v=22"></script>
 </body></html>
