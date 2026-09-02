@@ -398,29 +398,15 @@ window.acceptPending=async function(id){
 };
 window.likePost=async function(id){
   if(!auth.currentUser){alert('Sign in to like a match.');return}
-  try{
-    await runTransaction(db,async transaction=>{
-      const postRef=doc(db,'posts',id),snapshot=await transaction.get(postRef);
-      if(!snapshot.exists())throw new Error('Match post no longer exists.');
-      const post=snapshot.data(),uid=auth.currentUser.uid,likedBy=Array.isArray(post.likedBy)?post.likedBy:[];
-      const next=likedBy.includes(uid)?likedBy.filter(userId=>userId!==uid):[...likedBy,uid];
-      transaction.update(postRef,{likedBy:next,likes:next.length});
-    });
-  }catch(error){console.warn(error);alert('Could not save the like. Please try again.');}
+  try{await httpsCallable(functions,'toggleLike')({postId:id});}
+  catch(error){console.warn(error);alert('Could not save the like. This interaction may be blocked.');}
 };
 window.commentPost=async function(id){
   if(!auth.currentUser||!current){alert('Sign in to comment on a match.');return}
   const text=prompt('Add a comment');
   if(!text?.trim())return;
-  try{
-    await runTransaction(db,async transaction=>{
-      const postRef=doc(db,'posts',id),snapshot=await transaction.get(postRef);
-      if(!snapshot.exists())throw new Error('Match post no longer exists.');
-      const oldItems=Array.isArray(snapshot.data().commentItems)?snapshot.data().commentItems:[];
-      const items=[...oldItems,{id:crypto.randomUUID(),author:current.name||'Player',text:text.trim().slice(0,280),createdAt:Date.now()}].slice(-20);
-      transaction.update(postRef,{commentItems:items,comments:items.length});
-    });
-  }catch(error){console.warn(error);alert('Could not save the comment. Please try again.');}
+  try{await httpsCallable(functions,'addComment')({postId:id,text:text.trim()});}
+  catch(error){console.warn(error);const message=error.code==='functions/failed-precondition'?error.message:'Could not save the comment. Please try again.';alert(message);}
 };
 window.sharePost=function(id){
   const post=state.posts.find(item=>item.id===id);if(!post)return;
