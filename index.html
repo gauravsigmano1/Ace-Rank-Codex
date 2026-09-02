@@ -106,7 +106,8 @@ function syncUserMenu(){
 function cleanRenderAll(){
   current=state.users.find(u=>u.id===current.id)||current;
   byId('userChip').textContent=current.name;syncUserMenu();byId('singlesRating').innerHTML=`${Math.round(current.singles)} <small>RP</small>`;byId('singlesMatches').textContent=current.sm;const statLabel=byId('singlesMatches').previousElementSibling;if(statLabel)statLabel.textContent='Matches played';const doublesStat=byId('doublesMatches')?.parentElement;if(doublesStat)doublesStat.style.display='none';const doublesList=byId('doublesList');if(doublesList){doublesList.style.display='none';const doublesHeading=doublesList.previousElementSibling;if(doublesHeading)doublesHeading.style.display='none';}
-  let requests=state.pending.filter(p=>!p.accepted&&p.opponentEmail===current.email);
+  const signedInEmail=(auth.currentUser?.email||current.email||'').trim().toLowerCase();
+  let requests=state.pending.filter(p=>!p.accepted&&(p.opponentEmail||'').toLowerCase()===signedInEmail);
   const inviteRequest=window.inviteContext?`<div class="approval"><b>Score approval request</b><br>${esc(window.inviteContext.author||'Your opponent')} submitted ${esc(window.inviteContext.score||'a match score')}.<br><button class="primary" style="margin-top:8px" onclick="acceptPending('${window.inviteContext.id}')">Accept score</button></div>`:'';
   byId('pendingApprovals').innerHTML='';window.renderPendingScores?.();cleanFeed();cleanRanks();
 }
@@ -196,7 +197,9 @@ function watchCloudData(){
   onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll();window.ensureCity?.();dismissSplash()},err=>{console.warn('Could not load Rallysh users',err);dismissSplash()});
   onSnapshot(query(collection(db,'posts'),orderBy('createdAt','desc'),limit(100)),snap=>{state.posts=snap.docs.map(x=>({id:x.id,...x.data()}));if(current)renderFeed()},err=>console.warn('Could not load Rallysh posts',err));
   if(stopApprovals)stopApprovals();
-  stopApprovals=onSnapshot(query(collection(db,'approvals'),where('opponentEmail','==',current.email),where('status','==','pending')),snap=>{state.pending=snap.docs.map(x=>({id:x.id,...x.data()}));renderAll()},err=>console.warn('Could not load Rallysh approvals',err));
+  const signedInEmail=(auth.currentUser?.email||current?.email||'').trim().toLowerCase();
+  if(!signedInEmail){console.warn('Cannot load approvals because this Firebase account has no email.');state.pending=[];renderAll();return}
+  stopApprovals=onSnapshot(query(collection(db,'approvals'),where('opponentEmail','==',signedInEmail),where('status','==','pending')),snap=>{state.pending=snap.docs.map(x=>({id:x.id,...x.data()}));renderAll()},err=>{console.error('Could not load Rallysh approvals',err);state.pending=[];renderAll();});
 }
 onAuthStateChanged(auth,async user=>{
   try{
@@ -318,7 +321,8 @@ window.saveProfileContact=async function(){
 window.openPendingScores=function(){
   const modal=byId('pendingScores');
   const outgoing=state.posts.filter(post=>post.pending&&post.authorUid===current?.id).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  const incoming=state.pending.filter(post=>post.status==='pending'&&post.opponentEmail===current?.email);
+  const signedInEmail=(auth.currentUser?.email||current?.email||'').trim().toLowerCase();
+  const incoming=state.pending.filter(post=>post.status==='pending'&&(post.opponentEmail||'').toLowerCase()===signedInEmail);
   const outgoingHtml=outgoing.map(post=>`<div class="pending-item"><b>${esc(post.opponent||'Opponent')} · ${esc(post.score||'Match score')}</b><small>Awaiting approval. Points will be added after the opponent accepts.</small><button class="primary wide" onclick="sharePendingScore('${post.id}')">Share reminder</button></div>`).join('');
   const incomingHtml=incoming.map(post=>`<div class="pending-item"><b>${esc(post.author||'Opponent')} · ${esc(post.score||'Match score')}</b><small>This score is waiting for your approval.</small><button class="primary wide" onclick="acceptPending('${post.id}');closePendingScores()">Accept score</button></div>`).join('');
   byId('pendingScoresList').innerHTML=outgoingHtml||incomingHtml?`${outgoingHtml}${incomingHtml}`:'<p class="muted">You have no scores waiting for approval.</p>';
@@ -326,7 +330,8 @@ window.openPendingScores=function(){
 }
 window.closePendingScores=function(){byId('pendingScores').classList.add('hidden')}
 window.renderPendingScores=function(){
-  const pending=[...state.posts.filter(post=>post.pending&&post.authorUid===current?.id),...state.pending.filter(post=>post.status==='pending'&&post.opponentEmail===current?.email)];
+  const signedInEmail=(auth.currentUser?.email||current?.email||'').trim().toLowerCase();
+  const pending=[...state.posts.filter(post=>post.pending&&post.authorUid===current?.id),...state.pending.filter(post=>post.status==='pending'&&(post.opponentEmail||'').toLowerCase()===signedInEmail)];
   const count=byId('pendingCount'),button=byId('pendingButton');
   if(count){count.textContent=pending.length;count.classList.toggle('hidden',!pending.length)}
   if(button)button.setAttribute('aria-label',pending.length?`${pending.length} pending scores`:'Open pending scores');
@@ -359,7 +364,7 @@ window.cloudLogout=()=>signOut(auth);
 async function saveApproval(email,shareLink,returnHome=false){
   if(email&&!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
   if(!auth.currentUser||!draft.approval){alert('Please sign in again and retry.');return}
-  const r=draft.approval;r.opponentEmail=email||'';r.pending=true;r.authorUid=auth.currentUser.uid;r.inviteToken=r.inviteToken||crypto.randomUUID();
+  const r=draft.approval;r.opponentEmail=(email||'').trim().toLowerCase();r.pending=true;r.authorUid=auth.currentUser.uid;r.inviteToken=r.inviteToken||crypto.randomUUID();
   // Preserve the invite email with the temporary player so the backend can
   // associate that player with the account created from the shared link.
   if(Array.isArray(r.opponents))r.opponents=r.opponents.map((player,index)=>index===0&&!player.email?{...player,email}:player);
@@ -388,7 +393,7 @@ window.saveApproval=saveApproval;
 window.createApprovalLink=async function(){await saveApproval('',true)};
 window.submitRegisteredApproval=async function(){const email=draft.approval?.opponentEmail;if(!email){alert('Choose a registered opponent first.');return}await saveApproval(email,false)};
 window.acceptPending=async function(id){
-  const approval=state.pending.find(x=>x.id===id),isInvite=window.inviteContext?.id===id;if((!approval&&!isInvite)||(approval?.opponentEmail&&approval.opponentEmail!==current.email)){alert('This request must be accepted by the invited player.');return}
+  const approval=state.pending.find(x=>x.id===id),isInvite=window.inviteContext?.id===id,signedInEmail=(auth.currentUser?.email||current?.email||'').trim().toLowerCase();if((!approval&&!isInvite)||(approval?.opponentEmail&&approval.opponentEmail.toLowerCase()!==signedInEmail)){alert('This request must be accepted by the invited player.');return}
   try{await httpsCallable(functions,'approveMatch')({approvalId:id,inviteToken:isInvite?window.inviteContext.token:null});window.inviteContext=null;history.replaceState({},'',location.pathname);alert('Score approved and both players\' rankings have been updated.')}catch(error){console.error(error);const code=error.code||'unknown error';const message=code==='functions/failed-precondition'?'This match was created before all required player details were saved. Create a new match after both players have profiles.':`Could not approve this score: ${code}. Deploy the updated Rallysh Cloud Function, then try again.`;alert(message)}
 };
 window.likePost=async function(id){
