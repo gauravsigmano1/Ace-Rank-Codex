@@ -8,6 +8,18 @@ const reasons = ['Inappropriate content', 'Harassment or bullying', 'Spam', 'Fal
 let safety = {blockedUserIds: [], isAdmin: false};
 const call = name => httpsCallable(functions, name);
 const session = () => window.rallyshSession?.() || {current: null, state: {posts: [], users: []}};
+const localBlockKey = () => `rallysh-blocked-users:${auth.currentUser?.uid || ''}`;
+function applyBlockedUsers(ids, persist = true) {
+  safety.blockedUserIds = [...new Set((ids || []).filter(Boolean))];
+  window.rallyshBlockedUserIds = [...safety.blockedUserIds];
+  if (persist && auth.currentUser) {
+    try { localStorage.setItem(localBlockKey(), JSON.stringify(safety.blockedUserIds)); } catch (error) { console.warn('Could not cache blocked users', error); }
+  }
+}
+function restoreLocalBlockedUsers() {
+  if (!auth.currentUser) return;
+  try { applyBlockedUsers(JSON.parse(localStorage.getItem(localBlockKey()) || '[]'), false); } catch { applyBlockedUsers([], false); }
+}
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const postTime = post => typeof post.createdAt?.toMillis === 'function' ? post.createdAt.toMillis() : Number(post.createdAt || post.created || 0);
 const idsFor = post => [...(Array.isArray(post.playersA) ? post.playersA : [post.authorUid]), ...(Array.isArray(post.playersB) ? post.playersB : [])].filter(Boolean);
@@ -79,7 +91,7 @@ function renderSafetyFeed() {
 }
 
 async function refreshSafety() {
-  if (!auth.currentUser) return; try { safety = {...safety, ...(await call('getSafetyState')()).data}; window.rallyshBlockedUserIds=[...safety.blockedUserIds]; const button = document.getElementById('openModerationButton'); if (button) button.classList.toggle('hidden', !safety.isAdmin); filterPicker(); renderSafetyFeed(); } catch (error) { console.warn('Could not load Rallysh safety settings', error); }
+  if (!auth.currentUser) return; try { const data=(await call('getSafetyState')()).data; safety = {...safety, ...data}; applyBlockedUsers(data.blockedUserIds || []); const button = document.getElementById('openModerationButton'); if (button) button.classList.toggle('hidden', !safety.isAdmin); filterPicker(); renderSafetyFeed(); } catch (error) { console.warn('Could not load Rallysh safety settings; using this device’s blocked-user list.', error); restoreLocalBlockedUsers(); filterPicker(); renderSafetyFeed(); }
 }
 
 window.closeSafetyModal = id => document.getElementById(id)?.classList.add('hidden');
@@ -99,9 +111,17 @@ window.openContentMenu = postId => {
 window.openCommentMenu = (postId, commentId) => { window.safetyTarget = {targetType: 'comment', postId, commentId}; document.getElementById('contentMenuActions').innerHTML = '<button class="secondary wide" onclick="openReportModal()">Report comment</button>'; document.getElementById('contentMenu').classList.remove('hidden'); };
 window.openReportModal = () => { window.closeSafetyModal('contentMenu'); document.getElementById('reportModal').classList.remove('hidden'); };
 window.submitReport = async () => { if (!window.safetyTarget) return; try { await call('reportContent')({...window.safetyTarget, reason: document.getElementById('reportReason').value}); window.closeSafetyModal('reportModal'); alert('Report submitted. Rallysh moderation will review it.'); } catch (error) { console.error(error); alert('Could not submit the report. Please try again.'); } };
-window.blockUser = async targetUid => { if (!confirm('Block this player? Their posts and comments will be hidden, and neither of you can interact in Rallysh.')) return; try { await call('blockUser')({targetUid}); window.closeSafetyModal('contentMenu'); await refreshSafety(); window.renderAll?.(); alert('Player blocked. You can unblock them in Account settings.'); } catch (error) { console.error(error); alert('Could not block this player. Please try again.'); } };
+window.blockUser = async targetUid => {
+  if (!confirm('Block this player? Their posts and comments will be hidden, and neither of you can interact in Rallysh.')) return;
+  // Apply locally first so the result is immediate in a mobile WebView, even
+  // while its Firebase request is still in flight.
+  applyBlockedUsers([...safety.blockedUserIds, targetUid]);
+  window.closeSafetyModal('contentMenu'); window.renderAll?.();
+  try { await call('blockUser')({targetUid}); await refreshSafety(); alert('Player blocked. You can unblock them in Account settings.'); }
+  catch (error) { console.error(error); alert('This player is hidden on this device. Rallysh could not sync the block yet; check your connection and try again later.'); }
+};
 window.openBlockedUsers = () => { const {state} = session(), users = state.users.filter(user => safety.blockedUserIds.includes(user.id)); document.getElementById('blockedList').innerHTML = users.length ? users.map(user => `<div class="pending-item"><b>${escapeHtml(user.name)}</b><button class="secondary wide" style="margin-top:8px" onclick="unblockUser('${user.id}')">Unblock</button></div>`).join('') : '<p class="muted">You have not blocked any users.</p>'; document.getElementById('blockedModal').classList.remove('hidden'); };
-window.unblockUser = async targetUid => { try { await call('unblockUser')({targetUid}); await refreshSafety(); window.openBlockedUsers(); } catch (error) { console.error(error); alert('Could not unblock this player.'); } };
+window.unblockUser = async targetUid => { const previous=[...safety.blockedUserIds]; applyBlockedUsers(previous.filter(id => id !== targetUid)); window.renderAll?.(); try { await call('unblockUser')({targetUid}); await refreshSafety(); window.openBlockedUsers(); } catch (error) { console.error(error); applyBlockedUsers(previous); window.renderAll?.(); alert('Could not unblock this player.'); } };
 window.likePost = async postId => { try { await call('toggleLike')({postId}); } catch (error) { console.error(error); alert('Could not save the like. This interaction may be blocked.'); } };
 window.commentPost = async postId => { const text = prompt('Add a comment'); if (!text?.trim()) return; try { await call('addComment')({postId, text: text.trim()}); } catch (error) { console.error(error); const message = error.code === 'functions/failed-precondition' ? error.message : 'Could not post that comment. Please try again.'; alert(message); } };
 window.openDeleteAccount = () => { window.closeProfile?.(); document.getElementById('deleteConfirmation').value = ''; document.getElementById('deleteAccountModal').classList.remove('hidden'); };
@@ -114,4 +134,4 @@ const baseOpenProfile = window.openProfile; window.openProfile = async () => { a
 const baseOpenPicker = window.openPicker; window.openPicker = (...args) => { baseOpenPicker?.(...args); filterPicker(); };
 const baseRenderPicker = window.renderPicker; window.renderPicker = (...args) => { const result=baseRenderPicker?.(...args); filterPicker(); return result; };
 const baseRenderAll = window.renderAll; window.renderAll = (...args) => { const result = baseRenderAll?.(...args); injectProfileSettings(); renderSafetyFeed(); refreshSafety(); return result; };
-setTimeout(() => { injectAuthLinks(); injectAppleButtons(); refreshSafety(); }, 700);
+setTimeout(() => { injectAuthLinks(); injectAppleButtons(); restoreLocalBlockedUsers(); window.renderAll?.(); refreshSafety(); }, 700);
