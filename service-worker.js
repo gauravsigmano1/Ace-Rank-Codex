@@ -1,4 +1,4 @@
-const CACHE = 'rallysh-v23';
+const CACHE = 'rallysh-v24';
 const ASSETS = ['./', './index.html', './safety.js', './terms.html', './community-guidelines.html', './support.html', './manifest.webmanifest', './ace-rank-icon.svg', './rallysh-opening-preview.jpg'];
 
 self.addEventListener('install', event => {
