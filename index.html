@@ -30,6 +30,7 @@
 <section class="screen" id="ranks"><div class="section"><h2>Singles podium</h2></div><div id="singlesPodium" class="podium"></div><div class="section"><h2>Singles ranks</h2></div><div class="card" id="singlesList"></div><div class="section"><h2>Doubles ranks</h2></div><div class="card" id="doublesList"></div></section>
 </main><nav><button data-screen="home" onclick="show('home')">ÃƒÂ¢Ã…â€™Ã¢â‚¬Å¡<br>Home</button><button data-screen="match" onclick="newMatch()">ÃƒÂ¯Ã‚Â¼Ã¢â‚¬Â¹<br>Match</button><button data-screen="ranks" onclick="show('ranks')">ÃƒÂ¢Ã¢â€žÂ¢Ã…â€œ<br>Ranks</button></nav></div>
 <div id="pickerModal" class="modal hidden"><div class="modal-card"><button class="ghost" onclick="closePicker()">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back</button><h2 id="pickerTitle">Choose player</h2><div class="picker-head"><input id="playerSearch" placeholder="Search players" oninput="renderPicker()"><button class="secondary" onclick="addPlayerFromPicker()">+ New</button></div><div id="pickerList" class="picker"></div></div></div>
+<div id="newPlayerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="newPlayerTitle"><div class="modal-card new-player-card"><button class="ghost profile-close" onclick="closeNewPlayerForm()" aria-label="Close">×</button><span class="eyebrow">New player</span><h1 id="newPlayerTitle">Add a player</h1><p class="muted">Add their name now. You can send them an approval link after the match.</p><label>Player name<input id="newPlayerName" type="text" autocomplete="name" maxlength="60" placeholder="Enter player name" onkeydown="if(event.key==='Enter')saveNewPlayer()"></label><button class="primary wide" onclick="saveNewPlayer()">Add player</button><button class="ghost wide" onclick="closeNewPlayerForm()">Cancel</button></div></div>
 <script>
 const formats=[['5 Sets','sets',5,1],['3 Sets','sets',3,1],['Single Set','set',1,1],['Race to 4','race',4,.75],['Race to 3','race',3,.5],['Race to 2','race',2,.5],['7-Point Breaker','breaker',7,.5],['10-Point Breaker','breaker',10,.5]];
 let state=JSON.parse(localStorage.getItem('ace-rank-launch')||'null')||{users:[],posts:[],venues:[],pending:[]};let current=null,draft={},pickerRole='',profilePhoto='',courtPhoto='',courtCanvas=null,saving=false;
@@ -512,6 +513,7 @@ window.showPasswordReset=function(email){authView('resetPasswordForm');byId('res
 </style>
 <style>
   .header-actions{display:flex;align-items:center;gap:8px}.pending-button{position:relative;width:36px;height:36px;border-radius:50%;background:#25355a;color:var(--lime);font-weight:900;font-size:16px}.pending-button i{position:absolute;right:-4px;top:-4px;min-width:17px;height:17px;padding:1px 4px;border-radius:999px;background:var(--pink);color:#fff;font-size:10px;font-style:normal}.pending-item{padding:13px;margin:10px 0;border:1px solid #3d5791;border-radius:13px;background:#1b2949}.pending-item b{display:block}.pending-item small{color:var(--muted)}.pending-item .primary{margin-top:10px}
+  .new-player-card{max-width:420px}.new-player-card h1{font-size:28px;margin:4px 0}.new-player-card .ghost.wide{margin-top:8px}.new-player-card label{margin-top:18px}
   .city-modal{z-index:30}.city-modal .modal-card{max-width:420px}.city-required{color:var(--pink);font-size:12px}.city-suggestions{margin-top:6px;max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:11px}.city-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;color:var(--ink);background:#10182d;border-bottom:1px solid var(--line)}.city-suggestions button:last-child{border-bottom:0}
 </style>
 <script>
@@ -532,7 +534,21 @@ function renderQuickShare(){const root=quickRoot(),composer=document.querySelect
 function quickContinue(){const required=draft.type==='doubles'?3:1;if(Object.keys(draft.players).length!==required){alert('Choose every player first.');return}const scores=quickCollectScores();if(!scores)return;draft.completedScores=scores;renderQuickShare()}
 newMatch=function(){draft={type:'singles',players:{},format:formats[1],sets:3,venue:'',completedScores:null};courtPhoto='';courtCanvas=null;saving=false;const file=byId('courtFile'),venue=byId('venueInput'),preview=byId('courtPreview');if(file)file.value='';if(venue)venue.value='';if(preview){preview.removeAttribute('src');preview.style.display='none'}byId('match').classList.add('quick-mode');show('match');parkResult();renderQuickMatch()};
 pickPlayer=function(id){draft.players[pickerRole]=state.users.find(u=>u.id===id);closePicker();renderQuickMatch()};
-addPlayerFromPicker=function(){const name=prompt('New player name');if(!name?.trim())return;draft.players[pickerRole]={id:crypto.randomUUID(),email:'',name:name.trim(),singles:1200,sm:0};closePicker();renderQuickMatch()};
+window.openNewPlayerForm=function(){
+  const modal=byId('newPlayerModal'),input=byId('newPlayerName');
+  if(!modal||!input){alert('The new-player form could not be opened. Please refresh Rallysh and try again.');return}
+  input.value='';modal.classList.remove('hidden');
+  setTimeout(()=>input.focus(),80);
+};
+window.closeNewPlayerForm=function(){byId('newPlayerModal')?.classList.add('hidden')};
+window.saveNewPlayer=function(){
+  const input=byId('newPlayerName'),name=input?.value.trim().replace(/\s+/g,' ');
+  if(!name){input?.focus();alert('Enter the player’s name.');return}
+  const player={id:crypto.randomUUID(),email:'',name,singles:1200,doubles:1200,sm:0,dm:0};
+  draft.players[pickerRole]=player;
+  closeNewPlayerForm();closePicker();renderQuickMatch();
+};
+addPlayerFromPicker=function(){openNewPlayerForm()};
 go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('result');root.innerHTML='';if(result)root.append(result);return}legacyGo(n)};
 </script>
 <div id="accountProfile" class="modal account-modal hidden" role="dialog" aria-modal="true" aria-labelledby="accountProfileTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closeProfile()" aria-label="Close profile">×</button><div id="accountAvatar" class="user-avatar account-avatar">P</div><div class="account-meta"><h1 id="accountProfileTitle">Your profile</h1><p>Rallysh player details</p></div><label>Name<input id="accountName" class="readonly-field" readonly></label><label>Email<input id="accountEmail" class="readonly-field" type="email" readonly></label><label>Date of birth<input id="accountDob" class="readonly-field" readonly></label><label>Gender<input id="accountGender" class="readonly-field" readonly></label><label>Phone number<input id="accountPhone" type="tel" autocomplete="tel" placeholder="Add your phone number"></label><label>City <span class="city-required">Required</span><input id="accountCity" type="text" autocomplete="address-level2" placeholder="Start typing your city" oninput="renderCitySuggestions('accountCity','accountCitySuggestions')"></label><div id="accountCitySuggestions" class="city-suggestions hidden"></div><button id="saveContactButton" class="primary wide" onclick="saveProfileContact()">Save contact details</button></div></div>
@@ -543,5 +559,5 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
   /* Exposes read-only session data to the safety module. */
   window.rallyshSession=()=>({current,state});
 </script>
-<script type="module" src="safety.js?v=24"></script>
+<script type="module" src="safety.js?v=25"></script>
 </body></html>
