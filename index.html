@@ -88,7 +88,7 @@ function cleanFeed(){
   const connectedSince=new Map();
   myMatches.forEach(p=>idsFor(p).filter(id=>id!==current.id).forEach(id=>{const time=postTime(p),previous=connectedSince.get(id);if(previous===undefined||time<previous)connectedSince.set(id,time)}));
   let posts=state.posts.filter(p=>{if(p.pending||p.approvalStatus==='declined')return false;const ids=idsFor(p);if(ids.some(id=>blocked.has(id)))return false;if(ids.includes(current.id))return true;const time=postTime(p);return ids.some(id=>connectedSince.has(id)&&time>=connectedSince.get(id))}).slice(0,5);
-  const postMarkup=p=>{const likedBy=Array.isArray(p.likedBy)?p.likedBy:[],liked=!!current&&likedBy.includes(current.id),commentItems=Array.isArray(p.commentItems)?p.commentItems:[];return `<article class="post">${p.photo?`<img data-post-photo="${p.id}" src="${p.photo}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}${commentItems.length?`<div class="comment-list">${commentItems.map(comment=>`<p><b>${esc(comment.author||'Player')}</b> ${esc(comment.text||'')}</p>`).join('')}</div>`:''}<div class="actions"><button class="${liked?'liked':''}" onclick="likePost('${p.id}')">${liked?'Liked':'Like'} (${Number(p.likes)||0})</button><button onclick="commentPost('${p.id}')">Comment (${Number(p.comments)||commentItems.length})</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`};
+  const postMarkup=p=>{const likedBy=Array.isArray(p.likedBy)?p.likedBy:[],liked=!!current&&likedBy.includes(current.id),commentItems=Array.isArray(p.commentItems)?p.commentItems:[],imageSrc=window.initialPostImage?.(p)||p.photo;return `<article class="post">${p.photo?`<img data-post-photo="${p.id}" src="${imageSrc}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}${commentItems.length?`<div class="comment-list">${commentItems.map(comment=>`<p><b>${esc(comment.author||'Player')}</b> ${esc(comment.text||'')}</p>`).join('')}</div>`:''}<div class="actions"><button class="${liked?'liked':''}" onclick="likePost('${p.id}')">${liked?'Liked':'Like'} (${Number(p.likes)||0})</button><button onclick="commentPost('${p.id}')">Comment (${Number(p.comments)||commentItems.length})</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`};
   byId('feed').innerHTML=posts.length?posts.map(postMarkup).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;setTimeout(()=>window.renderPostPerspectiveImages?.(),0);
 }
 function cleanRanks(){
@@ -167,10 +167,12 @@ const splashStartedAt=Date.now();let splashDismissed=false;function dismissSplas
 window.inviteContext=(()=>{try{const raw=new URLSearchParams(location.search).get('invite');return raw?JSON.parse(raw):null}catch{return null}})();
 const asPlayer=(id,data)=>({id,...data});
 
-const imageCacheName='rallysh-rendered-match-images-v1';
+const imageCacheName='rallysh-rendered-match-images-v1',renderedImageMemory=new Map();
 const postParticipants=post=>[...(Array.isArray(post.playersA)?post.playersA:[post.authorUid]),...(Array.isArray(post.playersB)?post.playersB:[])].filter(Boolean);
 const invertScore=score=>String(score||'').replace(/(\d+)\s*-\s*(\d+)/g,(_,left,right)=>`${right}-${left}`);
 const viewerResult=post=>{const isAuthor=(Array.isArray(post.playersA)?post.playersA:[post.authorUid]).includes(current?.id);return {won:isAuthor?!!post.won:!post.won,score:isAuthor?post.score:invertScore(post.score),view:isAuthor?'author':'opponent'}};
+const renderedImageKey=post=>{const result=viewerResult(post);return `${post.id}-${result.view}-${result.won?'won':'loss'}-${result.score||''}`};
+window.initialPostImage=post=>post?.sourcePhoto?renderedImageMemory.get(renderedImageKey(post))||post.photo:post?.photo||'';
 function drawMatchWatermark(ctx,size,won,score){
   ctx.save();ctx.translate(size/2,size*.45);ctx.fillStyle=won?'#b9ff55dd':'#ff6c8fdd';ctx.beginPath();ctx.arc(0,0,size*.095,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=size*.021;ctx.lineCap='round';ctx.beginPath();
   if(won){ctx.moveTo(-size*.042,2);ctx.lineTo(-size*.007,size*.039);ctx.lineTo(size*.052,-size*.042)}else{ctx.moveTo(-size*.036,-size*.036);ctx.lineTo(size*.036,size*.036);ctx.moveTo(size*.036,-size*.036);ctx.lineTo(-size*.036,size*.036)}ctx.stroke();ctx.restore();
@@ -180,14 +182,15 @@ function drawMatchWatermark(ctx,size,won,score){
 function loadCanvasImage(url){return new Promise((resolve,reject)=>{const image=new Image();image.crossOrigin='anonymous';image.onload=()=>resolve(image);image.onerror=reject;image.src=url})}
 async function renderedPostImage(post){
   if(!post?.sourcePhoto||!current)return post?.photo||'';
-  const result=viewerResult(post),key=new Request(`${location.origin}/__rallysh-image-cache/${post.id}-${result.view}-${result.won?'won':'loss'}-${encodeURIComponent(result.score||'')}`),cache=await caches.open(imageCacheName),cached=await cache.match(key);
-  if(cached)return URL.createObjectURL(await cached.blob());
+  const result=viewerResult(post),memoryKey=renderedImageKey(post),existing=renderedImageMemory.get(memoryKey);if(existing)return existing;
+  const key=new Request(`${location.origin}/__rallysh-image-cache/${post.id}-${result.view}-${result.won?'won':'loss'}-${encodeURIComponent(result.score||'')}`),cache=await caches.open(imageCacheName),cached=await cache.match(key);
+  if(cached){const url=URL.createObjectURL(await cached.blob());renderedImageMemory.set(memoryKey,url);return url}
   const source=await loadCanvasImage(post.sourcePhoto),canvas=document.createElement('canvas'),size=720,context=canvas.getContext('2d');canvas.width=canvas.height=size;context.drawImage(source,0,0,size,size);drawMatchWatermark(context,size,result.won,result.score);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.84));if(!blob)throw new Error('Could not render match image');await cache.put(key,new Response(blob,{headers:{'Content-Type':'image/jpeg'}}));return URL.createObjectURL(blob);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.84));if(!blob)throw new Error('Could not render match image');await cache.put(key,new Response(blob,{headers:{'Content-Type':'image/jpeg'}}));const url=URL.createObjectURL(blob);renderedImageMemory.set(memoryKey,url);return url;
 }
 window.renderPostPerspectiveImages=async function(){
   const images=[...document.querySelectorAll('img[data-post-photo]')];
-  await Promise.all(images.map(async image=>{const post=state.posts.find(item=>item.id===image.dataset.postPhoto);if(!post?.sourcePhoto)return;try{const url=await renderedPostImage(post);if(image.isConnected){image.onload=()=>URL.revokeObjectURL(url);image.src=url}}catch(error){console.warn('Using the stored match image because the personalized image could not be rendered.',error)}}));
+  await Promise.all(images.map(async image=>{const post=state.posts.find(item=>item.id===image.dataset.postPhoto);if(!post?.sourcePhoto)return;try{const url=await renderedPostImage(post);if(image.isConnected&&image.src!==url)image.src=url}catch(error){console.warn('Using the stored match image because the personalized image could not be rendered.',error)}}));
 };
 
 window.resolveRegisteredPlayers=async function(players){
@@ -487,13 +490,18 @@ window.sharePost=function(id){
 };
 window.shareMatchImage=async function(id){
   const post=state.posts.find(item=>item.id===id);if(!post?.photo)return;
-  if(window.webkit?.messageHandlers?.rallyshShare&&!window.rallyshNativeImageShare){alert('Image-only sharing requires the next Rallysh iOS app update. It is ready in the updated Xcode project, but is not in the currently installed App Store build.');return}
   try{
     window.showRallyshLoader?.('Preparing image…');
     const imageUrl=await renderedPostImage(post);
     const response=await fetch(imageUrl,{mode:'cors'});
     if(!response.ok)throw new Error(`Image download failed (${response.status})`);
     const blob=await response.blob(),file=new File([blob],`rallysh-match-${id}.jpg`,{type:'image/jpeg'});
+    // The current App Store wrapper cannot pass Web Share files to iOS yet.
+    // Use the browser download path there, so no blank text-only share sheet
+    // is opened before the next native wrapper release.
+    if(window.webkit?.messageHandlers?.rallyshShare&&!window.rallyshNativeImageShare){
+      const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);alert('Your match image is downloading. Check the iPhone Downloads folder or Files app.');return;
+    }
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Rallysh match image',files:[file]});return}
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);alert('Your browser cannot share image files directly, so the image was downloaded instead.');
   }catch(error){
@@ -599,5 +607,5 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
   const showScreenWithoutLoader=show;
   show=function(id){window.showRallyshLoader('Loading screen…');requestAnimationFrame(()=>{showScreenWithoutLoader(id);window.hideRallyshLoader(220)})};
 </script>
-<script type="module" src="safety.js?v=27"></script>
+<script type="module" src="safety.js?v=28"></script>
 </body></html>
