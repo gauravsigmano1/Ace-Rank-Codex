@@ -50,7 +50,7 @@ function renderRoles(){let roles=draft.type==='singles'?[['opponent','Choose opp
 function openPicker(role){pickerRole=role;byId('pickerTitle').textContent=`Choose ${role.replace(/\d/,'')}`;byId('playerSearch').value='';renderPicker();byId('pickerModal').classList.remove('hidden')}function closePicker(){byId('pickerModal').classList.add('hidden')}function renderPicker(){let q=byId('playerSearch').value.toLowerCase(),chosen=Object.values(draft.players).map(p=>p.id);let users=state.users.filter(u=>u.id!==current.id&&!chosen.includes(u.id)&&u.name.toLowerCase().includes(q));byId('pickerList').innerHTML=users.length?users.map(u=>`<button onclick="pickPlayer('${u.id}')">${u.photo?`<img class="avatar" src="${u.photo}">`:`<div class="avatar">${esc(u.name[0])}</div>`}<span><b>${esc(u.name)}</b><br><small class="muted">Singles ${Math.round(u.singles)} Ãƒâ€šÃ‚Â· Doubles ${Math.round(u.doubles)}</small></span></button>`).join(''):'<div style="padding:15px" class="muted">No players yet. Use ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ+ NewÃƒÂ¢Ã¢â€šÂ¬Ã‚Â.</div>'}function pickPlayer(id){draft.players[pickerRole]=state.users.find(u=>u.id===id);closePicker();renderRoles()}function addPlayerFromPicker(){let name=prompt('New player name');if(!name?.trim())return;let u={id:crypto.randomUUID(),email:'',name:name.trim(),dob:'',gender:'',photo:'',singles:1200,doubles:1200,sm:0,dm:0};state.users.push(u);save();draft.players[pickerRole]=u;closePicker();renderRoles()}
 function toFormats(){let needed=draft.type==='singles'?1:3;if(Object.keys(draft.players).length!==needed){alert('Choose every player first.');return}byId('formats').innerHTML=formats.map((f,i)=>`<button class="choice" onclick="chooseFormat(${i})"><div><b>${f[0]}</b><span>${f[3]===.5?'Half rating impact':f[3]===.75?'75% rating impact':'Full rating impact'}</span></div></button>`).join('');go(3)}function chooseFormat(i){draft.format=formats[i];draft.sets=1;renderScores();go(4)}
 function opponentLabel(){let ps=draft.type==='singles'?[draft.players.opponent]:[draft.players.opponent1,draft.players.opponent2];return ps.map(p=>p.name).join(' & ')}function renderScores(){let [name,kind,max]=draft.format;byId('scoreHelp').textContent=`Your score vs ${opponentLabel()}.`;byId('scores').innerHTML=Array.from({length:draft.sets},(_,i)=>`<div class="score-row"><input id="a${i}" type="number" min="0" inputmode="numeric" placeholder="You${draft.type==='doubles'?' & partner':''}"><b>ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“</b><input id="b${i}" type="number" min="0" inputmode="numeric" placeholder="${esc(opponentLabel())}"></div>`).join('');byId('addSet').classList.toggle('hidden',kind!=='sets'||draft.sets>=max)}function addSet(){draft.sets++;renderScores()}
-function showVenuePicker(){byId('venueArea').classList.remove('hidden');byId('venueInput').focus();venueSearch()}function venueSearch(){let q=byId('venueInput').value.toLowerCase(),venues=[...new Set(state.venues)].filter(v=>v.toLowerCase().includes(q));byId('venueResults').innerHTML=venues.length?venues.map(v=>`<button onclick="pickVenue('${esc(v)}')">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â ${esc(v)}</button>`).join(''):'<div style="padding:10px" class="muted">Type a venue name to add it.</div>'}function pickVenue(v){byId('venueInput').value=v;byId('venueResults').innerHTML=''}
+function localCourts(){try{return JSON.parse(localStorage.getItem('rallysh-courts-by-city')||'{}')}catch{return{}}}function courtCity(){return(current?.city||'').trim()}window.rememberCourtVenue=function(name){const city=courtCity(),court=name?.trim();if(!city||!court)return;const saved=localCourts(),key=city.toLocaleLowerCase();saved[key]={city,courts:[...new Set([court,...(saved[key]?.courts||[])])].slice(0,80)};localStorage.setItem('rallysh-courts-by-city',JSON.stringify(saved))};function showVenuePicker(){byId('venueArea').classList.remove('hidden');byId('venueInput').focus();venueSearch()}function venueSearch(){const q=byId('venueInput').value.trim().toLowerCase(),city=courtCity(),entry=localCourts()[city.toLocaleLowerCase()],cloud=(state.courts||[]).filter(item=>(item.cityKey||'')===city.toLocaleLowerCase()).map(item=>item.name),venues=[...new Set([...(entry?.courts||[]),...cloud])].filter(v=>v.toLowerCase().includes(q));byId('venueResults').innerHTML=!city?'<div style="padding:10px" class="muted">Add your city in Profile to see court suggestions.</div>':venues.length?venues.map(v=>`<button onclick="pickVenue('${esc(v)}')">ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â ${esc(v)}<small style="margin-left:auto;color:var(--muted)">${esc(city)}</small></button>`).join(''):`<div style="padding:10px" class="muted">No saved courts in ${esc(city)} yet. Type a court name and it will be saved for ${esc(city)}.</div>`}window.refreshVenueSuggestions=venueSearch;function pickVenue(v){byId('venueInput').value=v;byId('venueResults').innerHTML=''}
 function courtPhotoSelected(input){let file=input.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{let im=new Image();im.onload=()=>{let s=Math.min(im.width,im.height),x=(im.width-s)/2,y=(im.height-s)/2,c=document.createElement('canvas');c.width=c.height=720;let ctx=c.getContext('2d');ctx.drawImage(im,x,y,s,s,0,0,720,720);courtPhoto=c.toDataURL('image/jpeg',.7);courtCanvas=c;let preview=byId('courtPreview');preview.src=courtPhoto;preview.style.display='block'};im.src=r.result};r.readAsDataURL(file)}
 function validRow(a,b,kind,max){if(a===b||a<0||b<0)return false;let hi=Math.max(a,b),lo=Math.min(a,b);if(kind==='sets'||kind==='set')return(hi===6&&lo<=4)||(hi===7&&(lo===5||lo===6));if(kind==='race')return hi===max&&lo<max;if(kind==='breaker')return hi>=max&&hi-lo>=2;return false}
 function k(m){return m<10?40:m<30?24:16}function saveMatch(){if(saving)return;let [,kind,max,weight]=draft.format,scores=[];for(let i=0;i<draft.sets;i++){let a=+byId('a'+i).value,b=+byId('b'+i).value;if(!Number.isFinite(a)||!Number.isFinite(b)||!validRow(a,b,kind,max)){alert(`That score is not valid for ${draft.format[0]}.`);return}scores.push([a,b])}let aw=scores.filter(s=>s[0]>s[1]).length,bw=scores.length-aw;if(aw===bw){alert('A match needs a winner. Add a deciding set.');return}saving=true;byId('postButton').disabled=true;byId('postButton').textContent='Creating approval requestÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦';let won=aw>bw,teamA=[current],teamB=[];if(draft.type==='singles')teamB=[draft.players.opponent];else{teamA.push(draft.players.partner);teamB=[draft.players.opponent1,draft.players.opponent2]}let key=draft.type==='singles'?'singles':'doubles',mk=draft.type==='singles'?'sm':'dm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=raw/teamA.length;let before=[...teamA,...teamB].map(p=>({id:p.id,r:p[key],m:p[mk]}));teamA.forEach(p=>{p[key]+=delta;p[mk]++});teamB.forEach(p=>{p[key]-=raw/teamB.length;p[mk]++});let venue=byId('venueInput').value.trim();if(venue&&!state.venues.includes(venue))state.venues.unshift(venue);let post={id:crypto.randomUUID(),author:current.name,won,score:scores.map(s=>s.join('ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“')).join(', '),delta:Math.round(delta),venue,photo:'',likes:0,comments:0,liked:false};if(courtPhoto)post.photo=watermark(courtPhoto,won,post.score);state.posts.push(post);let request={id:crypto.randomUUID(),opponent:teamB.map(p=>p.name).join(' & '),score:post.score,author:current.name,created:Date.now()};state.pending.push(request);save();let link=`${location.origin}${location.pathname}?approval=${btoa(JSON.stringify(request))}`;byId('result').innerHTML=`<div class="medal">${won?'ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â ':'ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â¾'}</div><h1>${won?'Victory recorded':'Match recorded'}</h1><p class="muted">Rating change: ${Math.round(delta)>=0?'+':''}${Math.round(delta)} ${key} points.</p><div class="approval"><b>Approval required from ${esc(request.opponent)}</b><br>Share this request so the opponent can create a profile and accept the score.</div><button class="primary wide" onclick="shareApproval('${btoa(link)}')">Share approval link</button><button class="secondary wide" style="margin-top:8px" onclick="show('home')">Back to feed</button>`;go(5);saving=false;byId('postButton').disabled=false;byId('postButton').textContent='Send for approval'}
@@ -62,7 +62,7 @@ function watermark(src,won,score){
   if(won){ctx.moveTo(-30,2);ctx.lineTo(-5,28);ctx.lineTo(37,-30)}else{ctx.moveTo(-26,-26);ctx.lineTo(26,26);ctx.moveTo(26,-26);ctx.lineTo(-26,26)}ctx.stroke();ctx.restore();
   ctx.fillStyle='#000b';ctx.fillRect(0,600,720,120);ctx.fillStyle='#fff';ctx.font='900 30px system-ui';ctx.fillText(`${won?'WON':'LOSS'} BY ${score}`,28,674);
   // Rallysh lockup at the lower right.
-  ctx.save();ctx.translate(562,638);ctx.fillStyle='#a7ff5a';ctx.beginPath();ctx.arc(18,18,18,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(18,18,14,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='900 27px system-ui';ctx.fillText('Rally',45,27);ctx.fillStyle='#a7ff5a';ctx.fillText('sh',116,27);ctx.restore();
+  ctx.save();ctx.translate(562,638);ctx.fillStyle='#a7ff5a';ctx.beginPath();ctx.arc(18,18,18,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.beginPath();ctx.arc(18,18,14,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='900 27px system-ui';ctx.fillText('Rally',45,27);ctx.fillStyle='#a7ff5a';ctx.fillText('sh',44+ctx.measureText('Rally').width,27);ctx.restore();
   return c.toDataURL('image/jpeg',.82)
 }
 function likePost(id){let p=state.posts.find(x=>x.id===id);p.liked=!p.liked;p.likes=Math.max(0,p.likes+(p.liked?1:-1));save();renderFeed()}function commentPost(id){let p=state.posts.find(x=>x.id===id);p.comments++;save();renderFeed()}function sharePost(id){let p=state.posts.find(x=>x.id===id);navigator.share?navigator.share({title:'Ace Rank match',text:`${p.author} ${p.won?'won':'lost'} ${p.score}${p.venue?` at ${p.venue}`:''}`}):navigator.clipboard.writeText(location.href)}function shareApproval(encoded){let url=atob(encoded);navigator.share?navigator.share({title:'Approve Ace Rank match',text:'Please create your profile and approve this match score.',url}):navigator.clipboard.writeText(url);alert('Approval link ready to share.')}function acceptRequest(id){let request=state.pending.find(p=>p.id===id);if(!request)return;request.accepted=true;save();renderAll();alert('Score accepted. In a production launch this confirmation would update the shared backend for both players.')}if('serviceWorker'in navigator)navigator.serviceWorker.register('service-worker.js');init();
@@ -88,8 +88,8 @@ function cleanFeed(){
   const connectedSince=new Map();
   myMatches.forEach(p=>idsFor(p).filter(id=>id!==current.id).forEach(id=>{const time=postTime(p),previous=connectedSince.get(id);if(previous===undefined||time<previous)connectedSince.set(id,time)}));
   let posts=state.posts.filter(p=>{if(p.pending||p.approvalStatus==='declined')return false;const ids=idsFor(p);if(ids.some(id=>blocked.has(id)))return false;if(ids.includes(current.id))return true;const time=postTime(p);return ids.some(id=>connectedSince.has(id)&&time>=connectedSince.get(id))}).slice(0,5);
-  const postMarkup=p=>{const likedBy=Array.isArray(p.likedBy)?p.likedBy:[],liked=!!current&&likedBy.includes(current.id),commentItems=Array.isArray(p.commentItems)?p.commentItems:[];return `<article class="post">${p.photo?`<img src="${p.photo}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}${commentItems.length?`<div class="comment-list">${commentItems.map(comment=>`<p><b>${esc(comment.author||'Player')}</b> ${esc(comment.text||'')}</p>`).join('')}</div>`:''}<div class="actions"><button class="${liked?'liked':''}" onclick="likePost('${p.id}')">${liked?'Liked':'Like'} (${Number(p.likes)||0})</button><button onclick="commentPost('${p.id}')">Comment (${Number(p.comments)||commentItems.length})</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`};
-  byId('feed').innerHTML=posts.length?posts.map(postMarkup).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;
+  const postMarkup=p=>{const likedBy=Array.isArray(p.likedBy)?p.likedBy:[],liked=!!current&&likedBy.includes(current.id),commentItems=Array.isArray(p.commentItems)?p.commentItems:[];return `<article class="post">${p.photo?`<img data-post-photo="${p.id}" src="${p.photo}" alt="Court match post" loading="lazy" decoding="async">`:''}<div class="post-body"><div class="row"><div class="avatar">${esc((p.author||'?')[0])}</div><div class="grow"><b>${esc(p.author||'Match result')}</b><br><span class="outcome ${p.won?'':'loss'}">${p.pending?'Pending approval':p.won?'Won':'Lost'}</span></div><b class="${p.delta<0?'loss':'gain'}">${p.delta>0?'+':''}${Math.round(Number(p.delta)||0)}</b></div>${scoreCard(p)}${p.venue?`<span class="venue">&#128205; ${esc(p.venue)}</span>`:''}${p.pending?`<p class="pending-label">Points pending opponent approval</p>`:''}${commentItems.length?`<div class="comment-list">${commentItems.map(comment=>`<p><b>${esc(comment.author||'Player')}</b> ${esc(comment.text||'')}</p>`).join('')}</div>`:''}<div class="actions"><button class="${liked?'liked':''}" onclick="likePost('${p.id}')">${liked?'Liked':'Like'} (${Number(p.likes)||0})</button><button onclick="commentPost('${p.id}')">Comment (${Number(p.comments)||commentItems.length})</button><button onclick="sharePost('${p.id}')">Share</button></div></div></article>`};
+  byId('feed').innerHTML=posts.length?posts.map(postMarkup).join(''):`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Your approved match posts will appear here.</div>`;setTimeout(()=>window.renderPostPerspectiveImages?.(),0);
 }
 function cleanRanks(){
   const blocked=new Set(window.rallyshBlockedUserIds||[]);
@@ -125,7 +125,7 @@ async function saveMatch(){
   if(window.resolveRegisteredPlayers)teamB=await window.resolveRegisteredPlayers(teamB);
   let key='singles',mk='sm',avg=t=>t.reduce((n,p)=>n+p[key],0)/t.length,avgM=t=>t.reduce((n,p)=>n+p[mk],0)/t.length,expected=1/(1+10**((avg(teamB)-avg(teamA))/400)),gamesA=scores.reduce((n,s)=>n+s[0],0),gamesB=scores.reduce((n,s)=>n+s[1],0),margin=kind==='breaker'?1.05:Math.min(1+Math.abs(gamesA-gamesB)/(gamesA+gamesB)*.5,1.5),raw=k(avgM(teamA))*(won?1-expected:-expected)*margin*weight,delta=Math.round(raw/teamA.length),score=scores.map(s=>s.join('-')).join(', '),venue=byId('venueInput').value.trim();
   let registeredOpponent=teamB.find(p=>p.email);
-  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),playersA:teamA.map(p=>p.id),playersB:teamB.map(p=>p.id),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
+  draft.approval={id:crypto.randomUUID(),author:current.name,authorEmail:current.email,opponent:teamB.map(p=>p.name).join(' & '),opponents:teamB.map(p=>({id:p.id,name:p.name,email:p.email||''})),playersA:teamA.map(p=>p.id),playersB:teamB.map(p=>p.id),score,won,delta,key,venue,photo:courtPhoto?watermark(courtPhoto,won,score):'',sourcePhoto:courtPhoto||'',created:Date.now(),opponentEmail:registeredOpponent?.email||''};
   // A selected registered player already has a Rallysh inbox. Save their
   // request immediately from the optional court step and return to Home.
   if(registeredOpponent){
@@ -162,10 +162,33 @@ import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.
 
 const firebaseConfig={apiKey:'AIzaSyCDkWprhLULz7NnWLb_HeUU_zI9NZ23VGY',authDomain:'rallysh.firebaseapp.com',projectId:'rallysh',storageBucket:'rallysh.firebasestorage.app',messagingSenderId:'920931092648',appId:'1:920931092648:web:33fc6bdee9c31bb3b79a9d',measurementId:'G-EFMLG6H00Y'};
 const cloudApp=initializeApp(firebaseConfig),auth=getAuth(cloudApp),db=getFirestore(cloudApp),storage=getStorage(cloudApp),functions=getFunctions(cloudApp);
-let cloudReady=false, pendingPassword='',stopApprovals=null,googleProfileSignup=false,googleProfileStep=0,socialProvider='';
+let cloudReady=false, pendingPassword='',stopApprovals=null,stopCourts=null,googleProfileSignup=false,googleProfileStep=0,socialProvider='';
 const splashStartedAt=Date.now();let splashDismissed=false;function dismissSplash(){if(splashDismissed)return;splashDismissed=true;setTimeout(()=>document.documentElement.classList.remove('session-checking'),Math.max(0,450-(Date.now()-splashStartedAt)))}
 window.inviteContext=(()=>{try{const raw=new URLSearchParams(location.search).get('invite');return raw?JSON.parse(raw):null}catch{return null}})();
 const asPlayer=(id,data)=>({id,...data});
+
+const imageCacheName='rallysh-rendered-match-images-v1';
+const postParticipants=post=>[...(Array.isArray(post.playersA)?post.playersA:[post.authorUid]),...(Array.isArray(post.playersB)?post.playersB:[])].filter(Boolean);
+const invertScore=score=>String(score||'').replace(/(\d+)\s*-\s*(\d+)/g,(_,left,right)=>`${right}-${left}`);
+const viewerResult=post=>{const isAuthor=(Array.isArray(post.playersA)?post.playersA:[post.authorUid]).includes(current?.id);return {won:isAuthor?!!post.won:!post.won,score:isAuthor?post.score:invertScore(post.score),view:isAuthor?'author':'opponent'}};
+function drawMatchWatermark(ctx,size,won,score){
+  ctx.save();ctx.translate(size/2,size*.45);ctx.fillStyle=won?'#b9ff55dd':'#ff6c8fdd';ctx.beginPath();ctx.arc(0,0,size*.095,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=size*.021;ctx.lineCap='round';ctx.beginPath();
+  if(won){ctx.moveTo(-size*.042,2);ctx.lineTo(-size*.007,size*.039);ctx.lineTo(size*.052,-size*.042)}else{ctx.moveTo(-size*.036,-size*.036);ctx.lineTo(size*.036,size*.036);ctx.moveTo(size*.036,-size*.036);ctx.lineTo(-size*.036,size*.036)}ctx.stroke();ctx.restore();
+  ctx.fillStyle='#000b';ctx.fillRect(0,size*.833,size,size*.167);ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(size*.042)}px system-ui`;ctx.fillText(`${won?'WON':'LOSS'} BY ${score}`,size*.04,size*.936);
+  ctx.save();ctx.translate(size*.78,size*.885);ctx.fillStyle='#a7ff5a';ctx.beginPath();ctx.arc(size*.025,size*.025,size*.025,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=size*.005;ctx.beginPath();ctx.arc(size*.025,size*.025,size*.019,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(size*.037)}px system-ui`;ctx.fillText('Rally',size*.062,size*.038);ctx.fillStyle='#a7ff5a';ctx.fillText('sh',size*.061+ctx.measureText('Rally').width,size*.038);ctx.restore();
+}
+function loadCanvasImage(url){return new Promise((resolve,reject)=>{const image=new Image();image.crossOrigin='anonymous';image.onload=()=>resolve(image);image.onerror=reject;image.src=url})}
+async function renderedPostImage(post){
+  if(!post?.sourcePhoto||!current)return post?.photo||'';
+  const result=viewerResult(post),key=new Request(`${location.origin}/__rallysh-image-cache/${post.id}-${result.view}-${result.won?'won':'loss'}-${encodeURIComponent(result.score||'')}`),cache=await caches.open(imageCacheName),cached=await cache.match(key);
+  if(cached)return URL.createObjectURL(await cached.blob());
+  const source=await loadCanvasImage(post.sourcePhoto),canvas=document.createElement('canvas'),size=720,context=canvas.getContext('2d');canvas.width=canvas.height=size;context.drawImage(source,0,0,size,size);drawMatchWatermark(context,size,result.won,result.score);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.84));if(!blob)throw new Error('Could not render match image');await cache.put(key,new Response(blob,{headers:{'Content-Type':'image/jpeg'}}));return URL.createObjectURL(blob);
+}
+window.renderPostPerspectiveImages=async function(){
+  const images=[...document.querySelectorAll('img[data-post-photo]')];
+  await Promise.all(images.map(async image=>{const post=state.posts.find(item=>item.id===image.dataset.postPhoto);if(!post?.sourcePhoto)return;try{const url=await renderedPostImage(post);if(image.isConnected){image.onload=()=>URL.revokeObjectURL(url);image.src=url}}catch(error){console.warn('Using the stored match image because the personalized image could not be rendered.',error)}}));
+};
 
 window.resolveRegisteredPlayers=async function(players){
   const resolved=[];
@@ -187,6 +210,16 @@ window.resolveRegisteredPlayers=async function(players){
 function cityNames(){return [...new Set(state.users.map(user=>(user.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b))}
 window.renderCitySuggestions=function(inputId,listId){const input=byId(inputId),list=byId(listId);if(!input||!list)return;const query=input.value.trim().toLowerCase();const choices=cityNames().filter(city=>!query||city.toLowerCase().includes(query)).slice(0,7);list.innerHTML=choices.map(city=>`<button type="button" onclick="chooseCity('${inputId}','${listId}',this.textContent)">${esc(city)}</button>`).join('');list.classList.toggle('hidden',!choices.length)}
 window.chooseCity=function(inputId,listId,city){byId(inputId).value=city;byId(listId).classList.add('hidden')}
+const normalizeCourtKey=value=>String(value||'').trim().toLocaleLowerCase().replace(/\s+/g,' ');
+function watchCourtsForCurrentCity(){
+  if(stopCourts){stopCourts();stopCourts=null}const city=(current?.city||'').trim(),cityKey=normalizeCourtKey(city);state.courts=[];
+  if(!cityKey)return;
+  stopCourts=onSnapshot(query(collection(db,'courts'),where('cityKey','==',cityKey),limit(100)),snap=>{state.courts=snap.docs.map(item=>({id:item.id,...item.data()})).sort((a,b)=>String(a.name).localeCompare(String(b.name)));window.refreshVenueSuggestions?.()},error=>console.warn('Could not load court suggestions',error));
+}
+window.saveCloudCourt=async function(name){
+  const city=(current?.city||'').trim(),court=String(name||'').trim();if(!city||!court||!auth.currentUser)return;
+  try{await httpsCallable(functions,'saveCourt')({city,name:court})}catch(error){console.warn('Court was saved locally but could not yet be shared with this city.',error)}
+};
 function showProfileForm(user=auth.currentUser){
   const providerId=user?.providerData?.find(p=>p.providerId==='google.com'||p.providerId==='apple.com')?.providerId||'';
   const isSocial=!!providerId;
@@ -201,6 +234,7 @@ function showProfileForm(user=auth.currentUser){
 function watchCloudData(){
   onSnapshot(collection(db,'users'),snap=>{state.users=snap.docs.map(x=>asPlayer(x.id,x.data()));if(current)current=state.users.find(x=>x.id===current.id)||current;cloudReady=true;renderAll();window.ensureCity?.();dismissSplash()},err=>{console.warn('Could not load Rallysh users',err);dismissSplash()});
   onSnapshot(query(collection(db,'posts'),orderBy('createdAt','desc'),limit(100)),snap=>{state.posts=snap.docs.map(x=>({id:x.id,...x.data()}));if(current)renderAll()},err=>console.warn('Could not load Rallysh posts',err));
+  watchCourtsForCurrentCity();
   if(stopApprovals)stopApprovals();
   const signedInEmail=(auth.currentUser?.email||current?.email||'').trim().toLowerCase();
   if(!signedInEmail){console.warn('Cannot load approvals because this Firebase account has no email.');state.pending=[];renderAll();return}
@@ -325,7 +359,7 @@ window.saveProfileContact=async function(){
     await setDoc(doc(db,'users',current.id),{phone,city},{merge:true});
     current={...current,phone,city};
     const position=state.users.findIndex(user=>user.id===current.id);
-    if(position>=0)state.users[position]={...state.users[position],phone,city};
+    if(position>=0)state.users[position]={...state.users[position],phone,city};watchCourtsForCurrentCity();
     button.textContent='Saved';
     setTimeout(()=>{button.disabled=false;button.textContent='Save contact details'},900);
   }catch(error){
@@ -376,7 +410,7 @@ window.ensureCity=function(){
 window.saveRequiredCity=async function(){
   const city=byId('requiredCityInput').value.trim();
   if(!city){alert('City is required to continue.');return}
-  try{await setDoc(doc(db,'users',current.id),{city},{merge:true});current={...current,city};byId('requiredCityModal').classList.add('hidden');renderAll()}catch(error){console.error(error);alert('Could not save your city. Please try again.')}
+  try{await setDoc(doc(db,'users',current.id),{city},{merge:true});current={...current,city};watchCourtsForCurrentCity();byId('requiredCityModal').classList.add('hidden');renderAll()}catch(error){console.error(error);alert('Could not save your city. Please try again.')}
 }
 window.cloudLogout=async function(){
   try{
@@ -393,12 +427,18 @@ async function saveApproval(email,shareLink,returnHome=false){
   if(email&&!/^\S+@\S+\.\S+$/.test(email)){alert('Enter a valid opponent email address.');return}
   if(!auth.currentUser||!draft.approval){alert('Please sign in again and retry.');return}
   const r=draft.approval;r.opponentEmail=(email||'').trim().toLowerCase();r.pending=true;r.authorUid=auth.currentUser.uid;r.inviteToken=r.inviteToken||crypto.randomUUID();
+  window.rememberCourtVenue?.(r.venue);await window.saveCloudCourt?.(r.venue);
   // Preserve the invite email with the temporary player so the backend can
   // associate that player with the account created from the shared link.
   if(Array.isArray(r.opponents))r.opponents=r.opponents.map((player,index)=>index===0&&!player.email?{...player,email}:player);
   const submit=byId('result').querySelector('.primary');if(submit){submit.disabled=true;submit.textContent='Saving match...'}
   try{
-    if(r.photo){const photoPath=`court-photos/${auth.currentUser.uid}/${r.id}.jpg`,imageRef=ref(storage,photoPath);await uploadString(imageRef,r.photo,'data_url');r.photo=await getDownloadURL(imageRef);r.photoPath=photoPath;r.contentStatus='reviewing'}
+    if(r.photo){
+      const photoPath=`court-photos/${auth.currentUser.uid}/${r.id}.jpg`,sourcePath=`court-photos/${auth.currentUser.uid}/${r.id}-source.jpg`,photoRef=ref(storage,photoPath),sourceRef=ref(storage,sourcePath);
+      await uploadString(photoRef,r.photo,'data_url');r.photo=await getDownloadURL(photoRef);
+      if(r.sourcePhoto){await uploadString(sourceRef,r.sourcePhoto,'data_url');r.sourcePhoto=await getDownloadURL(sourceRef);r.photoPath=sourcePath}else r.photoPath=photoPath;
+      r.contentStatus='reviewing';
+    }
     const match={...r,createdAt:Date.now(),likes:0,comments:0,liked:false,approvalStatus:'pending',contentStatus:r.contentStatus||'approved'};
     await setDoc(doc(db,'posts',r.id),match);
     await setDoc(doc(db,'approvals',r.id),{...match,status:'pending'});
@@ -443,30 +483,22 @@ window.commentPost=async function(id){
   catch(error){console.warn(error);const message=error.code==='functions/failed-precondition'?error.message:'Could not save the comment. Please try again.';alert(message);}
 };
 window.sharePost=function(id){
-  const post=state.posts.find(item=>item.id===id);if(!post)return;
-  byId('shareChoiceText').textContent=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}.`;
-  byId('shareScoreButton').onclick=()=>shareScoreOnly(id);
-  const download=byId('downloadImageButton');download.disabled=!post.photo;download.textContent=post.photo?'Download image':'No image on this match';download.onclick=()=>downloadPostImage(id);
-  byId('shareChoice').classList.remove('hidden');
+  window.shareMatchImage(id);
 };
-window.closeShareChoice=function(){byId('shareChoice').classList.add('hidden')}
-window.shareScoreOnly=async function(id){
-  const post=state.posts.find(item=>item.id===id);if(!post)return;
-  const appUrl=`${location.origin}${location.pathname}`,text=`${post.author||'A Rallysh player'} ${post.won?'won':'lost'} ${post.score||'a match'}${post.venue?` at ${post.venue}`:''}.\n\nTrack your tennis matches on Rallysh: ${appUrl}`;
-  try{if(navigator.share)await navigator.share({title:'Rallysh match',text});else{await navigator.clipboard.writeText(text);alert('Score and Rallysh link copied to your clipboard.')}window.closeShareChoice()}catch(error){if(error?.name!=='AbortError')alert('Could not open the share menu. Please try again.')}
-};
-window.downloadPostImage=async function(id){
+window.shareMatchImage=async function(id){
   const post=state.posts.find(item=>item.id===id);if(!post?.photo)return;
+  if(window.webkit?.messageHandlers?.rallyshShare&&!window.rallyshNativeImageShare){alert('Image-only sharing requires the next Rallysh iOS app update. It is ready in the updated Xcode project, but is not in the currently installed App Store build.');return}
   try{
-    const response=await fetch(post.photo,{mode:'cors',cache:'no-store'});
+    window.showRallyshLoader?.('Preparing image…');
+    const imageUrl=await renderedPostImage(post);
+    const response=await fetch(imageUrl,{mode:'cors'});
     if(!response.ok)throw new Error(`Image download failed (${response.status})`);
-    const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download=`rallysh-${post.won?'win':'loss'}-${id}.jpg`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);window.closeShareChoice();
+    const blob=await response.blob(),file=new File([blob],`rallysh-match-${id}.jpg`,{type:'image/jpeg'});
+    if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Rallysh match image',files:[file]});return}
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);alert('Your browser cannot share image files directly, so the image was downloaded instead.');
   }catch(error){
-    console.warn('Browser download was unavailable; opening the image directly.',error);
-    window.open(post.photo,'_blank','noopener');
-    alert('The image opened in a new tab. Use your browser menu to save or download it.');
-  }
+    if(error?.name!=='AbortError'){console.warn('Image sharing was unavailable.',error);alert('Could not prepare the match image for sharing. Please try again.');}
+  }finally{window.hideRallyshLoader?.()}
 };
 const publicAppUrl=location.protocol==='file:'?'https://gauravsigmano1.github.io/Ace-Rank-Codex/':`${location.origin}${location.pathname}`;
 const emailActionSettings={url:publicAppUrl,handleCodeInApp:true};
@@ -513,7 +545,7 @@ window.showPasswordReset=function(email){authView('resetPasswordForm');byId('res
 </style>
 <style>
   .header-actions{display:flex;align-items:center;gap:8px}.pending-button{position:relative;width:36px;height:36px;border-radius:50%;background:#25355a;color:var(--lime);font-weight:900;font-size:16px}.pending-button i{position:absolute;right:-4px;top:-4px;min-width:17px;height:17px;padding:1px 4px;border-radius:999px;background:var(--pink);color:#fff;font-size:10px;font-style:normal}.pending-item{padding:13px;margin:10px 0;border:1px solid #3d5791;border-radius:13px;background:#1b2949}.pending-item b{display:block}.pending-item small{color:var(--muted)}.pending-item .primary{margin-top:10px}
-  .new-player-card{max-width:420px}.new-player-card h1{font-size:28px;margin:4px 0}.new-player-card .ghost.wide{margin-top:8px}.new-player-card label{margin-top:18px}
+  .new-player-card{max-width:420px}.new-player-card h1{font-size:28px;margin:4px 0}.new-player-card .ghost.wide{margin-top:8px}.new-player-card label{margin-top:18px}.screen-loader{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:#080b17cc;backdrop-filter:blur(3px);transition:opacity .16s ease}.screen-loader.hidden{opacity:0;pointer-events:none}.screen-loader-card{display:grid;place-items:center;gap:12px;min-width:168px;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel);box-shadow:var(--shadow)}.screen-loader-spinner{width:38px;height:38px;border:4px solid #354774;border-top-color:var(--lime);border-radius:50%;animation:rallysh-spin .72s linear infinite}.screen-loader-copy{margin:0;color:var(--muted);font-size:13px}@keyframes rallysh-spin{to{transform:rotate(360deg)}}
   .city-modal{z-index:30}.city-modal .modal-card{max-width:420px}.city-required{color:var(--pink);font-size:12px}.city-suggestions{margin-top:6px;max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:11px}.city-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;color:var(--ink);background:#10182d;border-bottom:1px solid var(--line)}.city-suggestions button:last-child{border-bottom:0}
 </style>
 <script>
@@ -555,9 +587,17 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
 <div id="pendingScores" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pendingScoresTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closePendingScores()" aria-label="Close pending scores">×</button><h1 id="pendingScoresTitle">Pending scores</h1><p class="muted">Share a reminder if an opponent has not approved a match yet.</p><div id="pendingScoresList"></div></div></div>
 <div id="shareChoice" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shareChoiceTitle"><div class="modal-card"><button class="ghost profile-close" onclick="closeShareChoice()" aria-label="Close share options">×</button><h1 id="shareChoiceTitle">Share match</h1><p id="shareChoiceText" class="muted"></p><button id="shareScoreButton" class="primary wide">Share score</button><button id="downloadImageButton" class="secondary wide" style="margin-top:10px">Download image</button></div></div>
 <div id="requiredCityModal" class="modal city-modal hidden" role="dialog" aria-modal="true" aria-labelledby="requiredCityTitle"><div class="modal-card"><h1 id="requiredCityTitle">Add your city</h1><p class="muted">Your city is required to complete your Rallysh profile.</p><label>City <span class="city-required">Required</span><input id="requiredCityInput" type="text" autocomplete="address-level2" placeholder="Start typing your city" oninput="renderCitySuggestions('requiredCityInput','requiredCitySuggestions')"></label><div id="requiredCitySuggestions" class="city-suggestions hidden"></div><button class="primary wide" onclick="saveRequiredCity()">Save city</button></div></div>
+<div id="screenLoader" class="screen-loader hidden" role="status" aria-live="polite"><div class="screen-loader-card"><span class="screen-loader-spinner" aria-hidden="true"></span><p id="screenLoaderCopy" class="screen-loader-copy">Loading Rallysh…</p></div></div>
 <script>
   /* Exposes read-only session data to the safety module. */
   window.rallyshSession=()=>({current,state});
 </script>
-<script type="module" src="safety.js?v=26"></script>
+<script>
+  let rallyshLoaderTimer;
+  window.showRallyshLoader=function(copy='Loading Rallysh…'){const loader=byId('screenLoader');if(!loader)return;byId('screenLoaderCopy').textContent=copy;loader.classList.remove('hidden');clearTimeout(rallyshLoaderTimer)};
+  window.hideRallyshLoader=function(delay=0){clearTimeout(rallyshLoaderTimer);rallyshLoaderTimer=setTimeout(()=>byId('screenLoader')?.classList.add('hidden'),delay)};
+  const showScreenWithoutLoader=show;
+  show=function(id){window.showRallyshLoader('Loading screen…');requestAnimationFrame(()=>{showScreenWithoutLoader(id);window.hideRallyshLoader(220)})};
+</script>
+<script type="module" src="safety.js?v=27"></script>
 </body></html>
