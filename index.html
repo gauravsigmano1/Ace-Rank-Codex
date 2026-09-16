@@ -107,6 +107,7 @@ function syncUserMenu(){
   avatar.style.backgroundImage=current.photo?`url("${current.photo}")`:'';
 }
 function cleanRenderAll(){
+  if(!current)return;
   current=state.users.find(u=>u.id===current.id)||current;
   byId('userChip').textContent=current.name;syncUserMenu();byId('singlesRating').innerHTML=`${Math.round(current.singles)} <small>RP</small>`;byId('singlesMatches').textContent=current.sm;const statLabel=byId('singlesMatches').previousElementSibling;if(statLabel)statLabel.textContent='Matches played';const doublesStat=byId('doublesMatches')?.parentElement;if(doublesStat)doublesStat.style.display='none';const doublesList=byId('doublesList');if(doublesList){doublesList.style.display='none';const doublesHeading=doublesList.previousElementSibling;if(doublesHeading)doublesHeading.style.display='none';}
   const signedInEmail=(auth.currentUser?.email||current.email||'').trim().toLowerCase();
@@ -438,7 +439,7 @@ async function saveApproval(email,shareLink,returnHome=false){
   try{
     if(r.photo){
       const photoPath=`court-photos/${auth.currentUser.uid}/${r.id}.jpg`,sourcePath=`court-photos/${auth.currentUser.uid}/${r.id}-source.jpg`,photoRef=ref(storage,photoPath),sourceRef=ref(storage,sourcePath);
-      await uploadString(photoRef,r.photo,'data_url');r.photo=await getDownloadURL(photoRef);
+      await uploadString(photoRef,r.photo,'data_url');r.photo=await getDownloadURL(photoRef);r.renderedPhotoPath=photoPath;
       if(r.sourcePhoto){await uploadString(sourceRef,r.sourcePhoto,'data_url');r.sourcePhoto=await getDownloadURL(sourceRef);r.photoPath=sourcePath}else r.photoPath=photoPath;
       r.contentStatus='reviewing';
     }
@@ -490,20 +491,44 @@ window.sharePost=function(id){
 };
 window.shareMatchImage=async function(id){
   const post=state.posts.find(item=>item.id===id);if(!post?.photo)return;
+  const filename=`rallysh-match-${id}.jpg`;
+  const downloadImage=function(url){
+    const link=document.createElement('a');
+    link.href=url;link.download=filename;link.rel='noopener';
+    // The live iOS wrapper opens a new-window link in Safari, where the
+    // attachment header presents a real Files/Downloads download.
+    if(window.webkit?.messageHandlers?.rallyshShare&&!window.rallyshNativeImageShare)link.target='_blank';
+    document.body.append(link);link.click();link.remove();
+  };
+  const signedDownloadUrl=async function(){
+    const result=await httpsCallable(functions,'getMatchImageDownload')({postId:id});
+    if(!result.data?.url)throw new Error('The image download link was unavailable.');
+    return result.data.url;
+  };
   try{
     window.showRallyshLoader?.('Preparing image…');
-    const imageUrl=await renderedPostImage(post);
-    const response=await fetch(imageUrl,{mode:'cors'});
-    if(!response.ok)throw new Error(`Image download failed (${response.status})`);
-    const blob=await response.blob(),file=new File([blob],`rallysh-match-${id}.jpg`,{type:'image/jpeg'});
-    // The current App Store wrapper cannot pass Web Share files to iOS yet.
-    // Use the browser download path there, so no blank text-only share sheet
-    // is opened before the next native wrapper release.
+    // The current iOS WebView cannot return a File through Web Share. Opening
+    // a signed attachment URL hands the image to iOS Downloads/Files instead.
+    // This intentionally avoids fetch(), which Firebase Storage blocks with CORS.
     if(window.webkit?.messageHandlers?.rallyshShare&&!window.rallyshNativeImageShare){
-      const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);alert('Your match image is downloading. Check the iPhone Downloads folder or Files app.');return;
+      downloadImage(await signedDownloadUrl());
+      alert('Your match image is downloading. Check the Downloads folder or Files app.');
+      return;
     }
-    if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Rallysh match image',files:[file]});return}
-    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);alert('Your browser cannot share image files directly, so the image was downloaded instead.');
+    const imageUrl=await renderedPostImage(post);
+    try{
+      const response=await fetch(imageUrl,{mode:'cors'});
+      if(!response.ok)throw new Error(`Image download failed (${response.status})`);
+      const blob=await response.blob(),file=new File([blob],filename,{type:'image/jpeg'});
+      if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Rallysh match image',files:[file]});return}
+      const url=URL.createObjectURL(blob);downloadImage(url);setTimeout(()=>URL.revokeObjectURL(url),1200);alert('Your browser cannot share image files directly, so the image was downloaded instead.');return;
+    }catch(fetchError){
+      // Storage may not allow a GitHub Pages CORS fetch. The callable gives us
+      // a five-minute attachment URL, which works without changing Storage CORS.
+      console.warn('Using the secure image download fallback.',fetchError);
+      downloadImage(await signedDownloadUrl());
+      alert('Your match image is downloading. Check the Downloads folder or Files app.');
+    }
   }catch(error){
     if(error?.name!=='AbortError'){console.warn('Image sharing was unavailable.',error);alert('Could not prepare the match image for sharing. Please try again.');}
   }finally{window.hideRallyshLoader?.()}
@@ -607,5 +632,5 @@ go=function(n){if(n===5){parkComposer();const root=quickRoot(),result=byId('resu
   const showScreenWithoutLoader=show;
   show=function(id){window.showRallyshLoader('Loading screen…');requestAnimationFrame(()=>{showScreenWithoutLoader(id);window.hideRallyshLoader(220)})};
 </script>
-<script type="module" src="safety.js?v=28"></script>
+<script type="module" src="safety.js?v=29"></script>
 </body></html>

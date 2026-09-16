@@ -1,4 +1,4 @@
-const CACHE = 'rallysh-v28';
+const CACHE = 'rallysh-v29';
 const IMAGE_CACHE = 'rallysh-image-cache-v1';
 const ASSETS = ['./', './index.html', './safety.js', './terms.html', './community-guidelines.html', './support.html', './manifest.webmanifest', './ace-rank-icon.svg', './rallysh-opening-preview.jpg'];
 
